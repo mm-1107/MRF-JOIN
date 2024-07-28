@@ -49,7 +49,7 @@ if __name__ == '__main__':
     # epsilon_list = [0.1, 0.2, 0.4, 0.8, 1.6, 3.2]
     # epsilon_list = [float('inf')]
     # number of experiments
-    repeat = 2
+    repeat = 5
 
     num_party = 2
     parties = [chr(65+i) for i in range(num_party)] # A,B,...Z
@@ -60,7 +60,8 @@ if __name__ == '__main__':
     #     }
     # sequential composition
     epsilon = args.epsilon/num_party
-    common_attr = 8
+    common_dict = {"adult": 0, "nltcs": 8} 
+    common_attr = common_dict[data_name]
 
     _, all_headings = tools.read_csv('./data/' + data_name + '.csv')
     attr_num = len(all_headings)
@@ -77,13 +78,13 @@ if __name__ == '__main__':
             result = json.load(in_file)
     else:
         result = {}
-    if epsilon not in result:
-        result[epsilon] = {}
-    if data_name not in result[epsilon]:
-        result[epsilon][data_name] = {}
-    result[epsilon][data_name][3] = 0
-    result[epsilon][data_name][4] = 0
-    result[epsilon][data_name][5] = 0
+    if args.epsilon not in result:
+        result[args.epsilon] = {}
+    if data_name not in result[args.epsilon]:
+        result[args.epsilon][data_name] = {}
+    result[args.epsilon][data_name][3] = 0
+    result[args.epsilon][data_name][4] = 0
+    result[args.epsilon][data_name][5] = 0
     for i in range(repeat):
         exhead = []
         for idx, party in enumerate(parties):
@@ -98,7 +99,7 @@ if __name__ == '__main__':
                 preprocess(data_name)
             if args.task == 'TVD':
                 run_experiment([data_name], method_list, exp_name, task='TVD',
-                               epsilon_list=[epsilon], repeat=1,
+                               epsilon_list=[epsilon], repeat=repeat,
                                classifier_num=25, party=party)
             else:
                 split(data_name)
@@ -112,22 +113,22 @@ if __name__ == '__main__':
             concat_data = concat.concat(num_party=num_party, data_name=data_name)
             tmp_dict = concat.marginal_exp([concat_data], data_name)
             # print(tmp_dict)
-            result[epsilon][data_name][3] += tmp_dict[str(3)][0]
-            result[epsilon][data_name][4] += tmp_dict[str(4)][0]
-            result[epsilon][data_name][5] += tmp_dict[str(5)][0]
+            result[args.epsilon][data_name][3] += tmp_dict[str(3)][0]
+            result[args.epsilon][data_name][4] += tmp_dict[str(4)][0]
+            result[args.epsilon][data_name][5] += tmp_dict[str(5)][0]
         else:
             for k in range(5):
                 exp_name = exp_name+str(epsilon)+'_'+str(k)
                 concat.concat(num_party=num_party, data_name=data_name, exp_name=exp_name)
             # exp_name = exp_name+str(epsilon_list[0])+'_'+str(k)
             run_experiment([data_name], method_list, exp_name, task='SVM',
-                epsilon_list=[epsilon], repeat=repeat,
+                epsilon_list=[epsilon], repeat=1,
                 classifier_num=25, generate=False)
 
     if args.task == 'TVD':
         with open(path, 'w') as out_file:
-            result[epsilon][data_name][3] = result[epsilon][data_name][3] / repeat
-            result[epsilon][data_name][4] = result[epsilon][data_name][4] / repeat
-            result[epsilon][data_name][5] = result[epsilon][data_name][5] / repeat
+            result[args.epsilon][data_name][3] = result[args.epsilon][data_name][3] / repeat
+            result[args.epsilon][data_name][4] = result[args.epsilon][data_name][4] / repeat
+            result[args.epsilon][data_name][5] = result[args.epsilon][data_name][5] / repeat
             print(result)
             json.dump(result, out_file)

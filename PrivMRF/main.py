@@ -29,7 +29,7 @@ def run(data, domain, attr_hierarchy, exp_name, epsilon, task='TVD', p_config=No
         'beta5':        0.00,   # construct inner Bayesian network
         'data':         'no_data_name',
 
-        'theta':        8,
+        'theta':        6,
         'print':        True,
 
         'score':        'pairwsie_TVD', # pairwsie_TVD is emperically better
