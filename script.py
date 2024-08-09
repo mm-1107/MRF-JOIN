@@ -49,7 +49,7 @@ if __name__ == '__main__':
     # epsilon_list = [0.1, 0.2, 0.4, 0.8, 1.6, 3.2]
     # epsilon_list = [float('inf')]
     # number of experiments
-    repeat = 5
+    repeat = 3
 
     num_party = 2
     parties = [chr(65+i) for i in range(num_party)] # A,B,...Z
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     #     }
     # sequential composition
     epsilon = args.epsilon/num_party
-    common_dict = {"adult": 0, "nltcs": 8} 
+    common_dict = {"adult": 0, "nltcs": 8, "acs": 12, "br2000": 3}
     common_attr = common_dict[data_name]
 
     _, all_headings = tools.read_csv('./data/' + data_name + '.csv')
@@ -71,6 +71,7 @@ if __name__ == '__main__':
         14: {2: [7,6], 4: [4, 3, 3, 3], 8: [2, 2, 2, 2, 2, 1, 1, 1]},
         15: {2: [7,7], 4: [4, 4, 3, 3], 8: [2, 2, 2, 2, 2, 2, 1, 1]},
         16: {2: [8,7], 4: [4, 4, 4, 3], 8: [2, 2, 2, 2, 2, 2, 2, 1]},
+        23: {2: [12, 11], 4: [6, 6, 6, 5], 8: [3, 3, 3, 3, 3, 3, 3, 2]}
     }
     path = f'./result/{num_party}party_{args.task}.json'
     if os.path.exists(path):
