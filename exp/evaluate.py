@@ -23,7 +23,7 @@ def split(data_name):
     data, headings = utils.tools.read_csv('./preprocess/'+data_name+'.csv')
     data = np.array(data, dtype=int)
 
-    np.random.shuffle(data)
+    #np.random.shuffle(data)
 
     path = './exp_data'
     if not os.path.exists(path):
