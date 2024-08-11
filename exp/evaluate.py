@@ -15,7 +15,7 @@ from PrivMRF.preprocess import read_preprocessed_data
 from sklearn import preprocessing
 import os
 import multiprocessing as mp
-
+from PrivMRF.preprocess import preprocess
 
 # shuffle and split data
 def split(data_name):
@@ -144,7 +144,7 @@ def svm_classifier(exp_name, data_name, dp_data_list, classifier_num, target_lis
 
     # for i in range(1):
     for i in range(classifier_num):
-        target = target_list[i]
+        target = int(target_list[i])
         for j in range(len(data_list)):
             train_data = data_list[j]
 
@@ -175,8 +175,8 @@ def svm_classifier(exp_name, data_name, dp_data_list, classifier_num, target_lis
 
     # data_name = 'adult1'
     result_lock.acquire()
-    if os.path.exists('./result/'+exp_name+'_SVM.json'):
-        with open('./result/'+exp_name+'_SVM.json', 'r') as in_file:
+    if os.path.exists('./result/'+data_name+'_SVM.json'):
+        with open('./result/'+data_name+'_SVM.json', 'r') as in_file:
             result = json.load(in_file)
     else:
         result = {}
@@ -192,7 +192,7 @@ def svm_classifier(exp_name, data_name, dp_data_list, classifier_num, target_lis
     else:
         result[str(epsilon)][data_name][str(cross_valid_round)] = mis_rate
 
-    with open('./result/'+exp_name+'_SVM.json', 'w') as out_file:
+    with open('./result/'+data_name+'_SVM.json', 'w') as out_file:
         json.dump(result, out_file)
     result_lock.release()
 
@@ -227,7 +227,7 @@ def run_experiment(data_list, method_list, exp_name, \
     else:
         svm_exp(data_list, method_list, exp_name, \
             epsilon_list, repeat=repeat, marginal_num=marginal_num, \
-                classifier_num=classifier_num, generate=generate)
+                classifier_num=classifier_num, generate=generate,party=party)
         # the result is in './result/'+exp_name+'_SVM.json'
 
 def cross_validation_data(data_name):
@@ -253,7 +253,9 @@ def svm_exp(data_name_list, method_list, exp_name, \
         domain_json = json.load(open('./preprocess/'+data_name+'.json'))
         # print(domain_json)
         # target_list = list(range(len(domain_json)))
+        #_, all_attr_list = utils.tools.read_csv('./data/' + data_name + '.csv')
         target_list = list(domain_json.keys())
+        #target_list = all_attr_list
         print("target_list=", target_list)
         # random.shuffle(target_list)
         target_dict[data_name] = target_list
@@ -311,10 +313,13 @@ def svm_exp(data_name_list, method_list, exp_name, \
             print_lock.release()
 
             for data_name in data_name_list:
+                preprocess(data_name)
+                split(data_name)
+                cross_validation_data(data_name)
                 print_lock.acquire()
                 print('  data {}'.format(data_name))
                 print_lock.release()
-
+                
                 full_data = []
                 for k in range(5):
                     data_list, _ = utils.tools.read_csv('./exp_data/'+data_name+str(k)+'.csv')
@@ -325,7 +330,7 @@ def svm_exp(data_name_list, method_list, exp_name, \
                     dp_data_list = []
                     for method in method_list:
 
-                        temp_exp_name = exp_name+str(epsilon)+'_'+str(j)
+                        temp_exp_name = exp_name+'_'+str(j)
 
                         dp_data_list.append('./out/'+method+'_'+data_name+'_'+temp_exp_name+'.csv')
 

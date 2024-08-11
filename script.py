@@ -49,7 +49,7 @@ if __name__ == '__main__':
     # epsilon_list = [0.1, 0.2, 0.4, 0.8, 1.6, 3.2]
     # epsilon_list = [float('inf')]
     # number of experiments
-    repeat = 3
+    repeat = 1
 
     num_party = 2
     parties = [chr(65+i) for i in range(num_party)] # A,B,...Z
@@ -73,19 +73,19 @@ if __name__ == '__main__':
         16: {2: [8,7], 4: [4, 4, 4, 3], 8: [2, 2, 2, 2, 2, 2, 2, 1]},
         23: {2: [12, 11], 4: [6, 6, 6, 5], 8: [3, 3, 3, 3, 3, 3, 3, 2]}
     }
-    path = f'./result/{num_party}party_{args.task}.json'
+    path = f'./result/{data_name}_{num_party}party_{args.task}.json'
     if os.path.exists(path):
         with open(path, 'r') as in_file:
             result = json.load(in_file)
     else:
         result = {}
-    if args.epsilon not in result:
-        result[args.epsilon] = {}
-    if data_name not in result[args.epsilon]:
-        result[args.epsilon][data_name] = {}
-    result[args.epsilon][data_name][3] = 0
-    result[args.epsilon][data_name][4] = 0
-    result[args.epsilon][data_name][5] = 0
+    if str(args.epsilon) not in result:
+        result[str(args.epsilon)] = {}
+    if data_name not in result[str(args.epsilon)]:
+        result[str(args.epsilon)][data_name] = {}
+    result[str(args.epsilon)][data_name]["3"] = 0
+    result[str(args.epsilon)][data_name]["4"] = 0
+    result[str(args.epsilon)][data_name]["5"] = 0
     for i in range(repeat):
         exhead = []
         for idx, party in enumerate(parties):
@@ -100,7 +100,7 @@ if __name__ == '__main__':
                 preprocess(data_name)
             if args.task == 'TVD':
                 run_experiment([data_name], method_list, exp_name, task='TVD',
-                               epsilon_list=[epsilon], repeat=repeat,
+                               epsilon_list=[epsilon], repeat=1,
                                classifier_num=25, party=party)
             else:
                 split(data_name)
@@ -114,22 +114,22 @@ if __name__ == '__main__':
             concat_data = concat.concat(num_party=num_party, data_name=data_name)
             tmp_dict = concat.marginal_exp([concat_data], data_name)
             # print(tmp_dict)
-            result[args.epsilon][data_name][3] += tmp_dict[str(3)][0]
-            result[args.epsilon][data_name][4] += tmp_dict[str(4)][0]
-            result[args.epsilon][data_name][5] += tmp_dict[str(5)][0]
+            result[str(args.epsilon)][data_name]["3"] += tmp_dict["3"][0]
+            result[str(args.epsilon)][data_name]["4"] += tmp_dict["4"][0]
+            result[str(args.epsilon)][data_name]["5"] += tmp_dict["5"][0]
         else:
             for k in range(5):
-                exp_name = exp_name+str(epsilon)+'_'+str(k)
-                concat.concat(num_party=num_party, data_name=data_name, exp_name=exp_name)
+                exp_name_ = exp_name+str(epsilon)+'_'+str(k)
+                concat.concat(num_party=num_party, data_name=data_name, exp_name=exp_name_)
             # exp_name = exp_name+str(epsilon_list[0])+'_'+str(k)
-            run_experiment([data_name], method_list, exp_name, task='SVM',
-                epsilon_list=[epsilon], repeat=1,
+            run_experiment([data_name], method_list, exp_name+str(epsilon), task='SVM',
+                epsilon_list=[args.epsilon], repeat=1,
                 classifier_num=25, generate=False)
 
     if args.task == 'TVD':
         with open(path, 'w') as out_file:
-            result[args.epsilon][data_name][3] = result[args.epsilon][data_name][3] / repeat
-            result[args.epsilon][data_name][4] = result[args.epsilon][data_name][4] / repeat
-            result[args.epsilon][data_name][5] = result[args.epsilon][data_name][5] / repeat
+            result[str(args.epsilon)][data_name]["3"] = result[str(args.epsilon)][data_name]["3"] / repeat
+            result[str(args.epsilon)][data_name]["4"] = result[str(args.epsilon)][data_name]["4"] / repeat
+            result[str(args.epsilon)][data_name]["5"] = result[str(args.epsilon)][data_name]["5"] / repeat
             print(result)
             json.dump(result, out_file)
