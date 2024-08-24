@@ -263,8 +263,8 @@ def svm_exp(data_name_list, method_list, exp_name, \
         if generate:
             cross_validation_data(data_name)
 
-    json.dump(target_dict, open('./exp_data/target.json', 'w'))
-    target_dict = json.load(open('./exp_data/target.json'))
+    json.dump(target_dict, open(f'./exp_data/target_{data_name}.json', 'w'))
+    target_dict = json.load(open(f'./exp_data/target_{data_name}.json'))
 
     if generate:
         for epsilon in epsilon_list:

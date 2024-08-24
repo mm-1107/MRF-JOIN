@@ -1,7 +1,5 @@
 import os
 import argparse
-# Copyright 2021 Kuntai Cai
-# caikt@comp.nus.edu.sg
 
 thread_num = '16'
 os.environ["OMP_NUM_THREADS"] = thread_num
@@ -23,12 +21,13 @@ import sys
 from PrivMRF.preprocess import preprocess
 from PrivMRF.utils import tools
 import concat
+from time import time
 
 parser = argparse.ArgumentParser(description='manual to this script')
 parser.add_argument('--epsilon', type=float, default=0.8)
 parser.add_argument('--task', type=str, default='TVD') #tvd/svm
 parser.add_argument('--dataset', type=str, default='nltcs')
-
+parser.add_argument('--party', type=int, default=2)
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -49,9 +48,9 @@ if __name__ == '__main__':
     # epsilon_list = [0.1, 0.2, 0.4, 0.8, 1.6, 3.2]
     # epsilon_list = [float('inf')]
     # number of experiments
-    repeat = 1
+    repeat = 5
 
-    num_party = 2
+    num_party = args.party
     parties = [chr(65+i) for i in range(num_party)] # A,B,...Z
     # headings = {"A": [0, 1, 2, 9],
     #     "B": [3, 4, 5, 9],
@@ -99,9 +98,11 @@ if __name__ == '__main__':
             else:
                 preprocess(data_name)
             if args.task == 'TVD':
+                client_start = time()
                 run_experiment([data_name], method_list, exp_name, task='TVD',
                                epsilon_list=[epsilon], repeat=1,
                                classifier_num=25, party=party)
+                client_end = time()
             else:
                 split(data_name)
                 run_experiment([data_name], method_list, exp_name, task='SVM',
@@ -111,7 +112,9 @@ if __name__ == '__main__':
             print(f"Executed dataset = {data_name}, party = {party}, common = {common_attr}, epsilon = {epsilon}")
 
         if args.task == 'TVD':
+            server_start = time()
             concat_data = concat.concat(num_party=num_party, data_name=data_name)
+            server_end = time()
             tmp_dict = concat.marginal_exp([concat_data], data_name)
             # print(tmp_dict)
             result[str(args.epsilon)][data_name]["3"] += tmp_dict["3"][0]
@@ -133,3 +136,4 @@ if __name__ == '__main__':
             result[str(args.epsilon)][data_name]["5"] = result[str(args.epsilon)][data_name]["5"] / repeat
             print(result)
             json.dump(result, out_file)
+        print(f'\n\nOne client duration = {client_end-client_start}, Server duration = {server_end-server_start}')
