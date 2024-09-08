@@ -29,6 +29,15 @@ parser.add_argument('--task', type=str, default='TVD') #tvd/svm
 parser.add_argument('--dataset', type=str, default='nltcs')
 parser.add_argument('--party', type=int, default=2)
 
+def eps_per_party(epsilon, num_party):
+    total_to_party = {
+         0.4: {2: 0.270},
+         0.8: {2: 0.540, 4: 0.370, 8: 0.250},
+         1.6: {2: 1.090},
+         3.2: {2: 2.160}
+    }
+    return total_to_party[epsilon][num_party]
+
 if __name__ == '__main__':
     args = parser.parse_args()
     for path in ['./temp', './result', './out']:
@@ -44,13 +53,11 @@ if __name__ == '__main__':
     # arbitrary string for naming output data
     exp_name = 'test'
 
-    # 0.1, 0.2, 0.4, 0.8, 1.6, 3.2
-    # epsilon_list = [0.1, 0.2, 0.4, 0.8, 1.6, 3.2]
-    # epsilon_list = [float('inf')]
     # number of experiments
-    repeat = 5
+    repeat = 1
 
     num_party = args.party
+
     parties = [chr(65+i) for i in range(num_party)] # A,B,...Z
     # headings = {"A": [0, 1, 2, 9],
     #     "B": [3, 4, 5, 9],
@@ -58,7 +65,7 @@ if __name__ == '__main__':
     #     "D": [9, 11, 12, 13, 14]
     #     }
     # sequential composition
-    epsilon = args.epsilon/num_party
+    epsilon = eps_per_party(args.epsilon, num_party)
     common_dict = {"adult": 0, "nltcs": 8, "acs": 12, "br2000": 3}
     common_attr = common_dict[data_name]
 
@@ -116,6 +123,7 @@ if __name__ == '__main__':
             concat_data = concat.concat(num_party=num_party, data_name=data_name)
             server_end = time()
             tmp_dict = concat.marginal_exp([concat_data], data_name)
+            concat.eval_diff_MI(data_name=data_name, syn=concat_data)
             # print(tmp_dict)
             result[str(args.epsilon)][data_name]["3"] += tmp_dict["3"][0]
             result[str(args.epsilon)][data_name]["4"] += tmp_dict["4"][0]

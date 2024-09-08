@@ -2,9 +2,12 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 from PrivMRF.markov_random_field import MarkovRandomField
-from PrivMRF.utils.tools import read_csv, write_csv, generate_column_data
+from PrivMRF.utils.tools import read_csv, write_csv, generate_column_data, dp_entropy
 from PrivMRF.preprocess import preprocess
 from exp.evaluate import k_way_marginal
+from PrivMRF.domain import Domain
+import json
+import itertools
 
 def pandas_generate_cond_column_data(df, model, clique_factor, cond, target, all_attr_list):
     clique_factor = clique_factor.moveaxis(all_attr_list)
@@ -173,7 +176,34 @@ def marginal_exp(dp_data_list, data_name="acs", marginal_num=300):
         #     result[str(epsilon)][data_name][str(i)] = {}
         # result[str(epsilon)][data_name][str(i)][str(k)] = tvd_list
     return tvd_dict
-    
+
+def eval_diff_MI(data_name, syn):
+    raw, headings = read_csv('./preprocess/' + data_name + '.csv', print_info=False)
+    raw = np.array(raw, dtype=int)
+    syn = np.array(syn, dtype=int)
+    attr_num = raw.shape[1]
+    domain = json.load(open('./preprocess/'+data_name+'.json'))
+    domain = {int(key): domain[key] for key in domain}
+    domain = Domain(domain, list(range(attr_num)))
+
+    diff = 0
+    num_pairs = 0
+    for pair in itertools.combinations(domain.attr_list, 2):
+        attr_A = pair[0]
+        attr_B = pair[1]
+        raw_MI = -dp_entropy({}, raw, domain, [attr_A, attr_B], 0)[0]
+        raw_MI += dp_entropy({}, raw, domain, [attr_A], 0)[0]
+        raw_MI += dp_entropy({}, raw, domain, [attr_B], 0)[0]
+
+        syn_MI = -dp_entropy({}, syn, domain, [attr_A, attr_B], 0)[0]
+        syn_MI += dp_entropy({}, syn, domain, [attr_A], 0)[0]
+        syn_MI += dp_entropy({}, syn, domain, [attr_B], 0)[0]
+
+        diff += abs(raw_MI - syn_MI)
+        num_pairs += 1
+        print(f"Mutual information of {attr_A} and {attr_B} -> raw: {raw_MI}, syn: {syn_MI}")
+    print("Evaluation of mutual information =", diff/num_pairs)
+
 if __name__ == '__main__':
     data_name = "dummy_12_8_100000"
     data_list = concat(num_party=2, data_name=data_name)

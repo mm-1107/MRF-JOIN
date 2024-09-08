@@ -175,6 +175,7 @@ def run_syn(data_name, exp_name, epsilon, task='TVD', party="A"):
 
     data, domain, attr_hierarchy = read_preprocessed_data(data_name, task)
     model = run(data, domain, attr_hierarchy, exp_name, epsilon, task, p_config)
+    print(f'run_syn, save model in ./temp/{exp_name}_party{party}_{data_name}_model.mrf')
     MarkovRandomField.save_model(model, f'./temp/{exp_name}_party{party}_{data_name}_model.mrf')
     data_list = model.synthetic_data('./out/' + 'PrivMRF_'+ data_name + '_' + exp_name + '.csv')
     return data_list
