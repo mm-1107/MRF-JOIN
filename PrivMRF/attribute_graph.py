@@ -39,6 +39,8 @@ class AttributeGraph:
         self.attr_list = attr_list
         self.config = config
         self.data_name = data_name
+        self.share_attr = config['share_attr']
+        self.score_wgt = 1
 
         self.attr_num = len(domain)
         self.privacy_budget = config['beta1'] * tools.privacy_budget(config['epsilon'])
@@ -174,18 +176,18 @@ class AttributeGraph:
                     print('  attr: {}, level: {} max_level: {}'.format(attr, self.attr_to_level[attr], self.max_level[attr]))
 
         attr_flag = [0] * self.attr_num
-        print("## DEBUG ## attr_flag", attr_flag)
+        # print("## DEBUG ## attr_flag", attr_flag)
         for measure in self.measure_list:
             for attr in measure:
                 idx = self.domain.attr_list.index(attr)
                 attr_flag[idx] += 1
-        print("## DEBUG ## attr_flag", attr_flag)
+        # print("## DEBUG ## attr_flag", attr_flag)
         for idx in range(self.attr_num):
             if attr_flag[idx] == 0:
                 attr = self.domain.attr_list[idx]
                 self.measure_list.append(tuple([attr]))
                 print('single attr measure:', attr)
-        print("## DEBUG ## attr_flag", attr_flag)
+        # print("## DEBUG ## attr_flag", attr_flag)
         # if there remains space for other measures, add them
         measure_list = \
             list(tools.deduplicate_measure_set(tuple(sorted(measure)) \
@@ -360,6 +362,7 @@ class AttributeGraph:
                     measure_list.append(edge)
 
         measure_list = list(set(measure_list))
+        print("## Debug measure_list in construct_inner_Bayesian_network", measure_list)
         return measure_list
 
     def maximal_parents(self, parents_set, dom):
@@ -405,6 +408,11 @@ class AttributeGraph:
         best_score = self.min_score
         for ap in attr_parents:
             score = self.attr_parents_score(ap[0], list(ap[1]))
+            # For MRF-JOIN+
+            if self.share_attr in ap[1]:
+                score = score * self.score_wgt
+
+            print("# DEBUG #", score, ap[0], ap[1])
             if score > best_score:
                 best_score = score
                 best_attr = ap[0]
@@ -416,7 +424,7 @@ class AttributeGraph:
         marginal = [best_attr]
         marginal.extend(best_parent)
         marginal = tuple(sorted(marginal))
-
+        print("# DEBUG #", (marginal, best_attr), best_score)
         return (marginal, best_attr), best_score
 
     # use greedy bayes to find measures

@@ -66,18 +66,28 @@ if __name__ == '__main__':
     #     }
     # sequential composition
     epsilon = eps_per_party(args.epsilon, num_party)
-    common_dict = {"adult": 0, "nltcs": 8, "acs": 12, "br2000": 3}
-    common_attr = common_dict[data_name]
+    common_dict = {"adult": [0], "nltcs": [7,8,9], "acs": [11,12], "br2000": [3,4]}
+    share_attr = common_dict[data_name]
 
     _, all_headings = tools.read_csv('./data/' + data_name + '.csv')
     attr_num = len(all_headings)
     attr_dist = {
-        12: {2: [6,5], 4: [3, 3, 3, 2], 8: [2, 2, 2, 1, 1, 1, 1, 1]},
-        13: {2: [6,6], 4: [3, 3, 3, 3], 8: [2, 2, 2, 2, 1, 1, 1, 1]},
-        14: {2: [7,6], 4: [4, 3, 3, 3], 8: [2, 2, 2, 2, 2, 1, 1, 1]},
-        15: {2: [7,7], 4: [4, 4, 3, 3], 8: [2, 2, 2, 2, 2, 2, 1, 1]},
-        16: {2: [8,7], 4: [4, 4, 4, 3], 8: [2, 2, 2, 2, 2, 2, 2, 1]},
-        23: {2: [12, 11], 4: [6, 6, 6, 5], 8: [3, 3, 3, 3, 3, 3, 3, 2]}
+        1: { # shared attr num
+            12: {2: [6,5], 4: [3, 3, 3, 2], 8: [2, 2, 2, 1, 1, 1, 1, 1]},
+            13: {2: [6,6], 4: [3, 3, 3, 3], 8: [2, 2, 2, 2, 1, 1, 1, 1]},
+            14: {2: [7,6], 4: [4, 3, 3, 3], 8: [2, 2, 2, 2, 2, 1, 1, 1]},
+            15: {2: [7,7], 4: [4, 4, 3, 3], 8: [2, 2, 2, 2, 2, 2, 1, 1]},
+            16: {2: [8,7], 4: [4, 4, 4, 3], 8: [2, 2, 2, 2, 2, 2, 2, 1]},
+            23: {2: [12, 11], 4: [6, 6, 6, 5], 8: [3, 3, 3, 3, 3, 3, 3, 2]}
+        },
+        2: { # shared attr num
+            15: {2: [6,7]},
+            16: {2: [7,7]},
+        },
+        3: { # shared attr num
+            15: {2: [6,6]},
+            16: {2: [6,7]},
+        }
     }
     path = f'./result/{data_name}_{num_party}party_{args.task}.json'
     if os.path.exists(path):
@@ -96,10 +106,10 @@ if __name__ == '__main__':
         exhead = []
         for idx, party in enumerate(parties):
             if num_party > 1:
-                # _, _, _, exhead = preprocess(data_list[0], party, num_party, common_attr, headings[party])
+                # _, _, _, exhead = preprocess(data_list[0], party, num_party, share_attr, headings[party])
                 _, _, _, exhead_ = preprocess(data_name, party, num_party,
-                                              attr_dist[attr_num][num_party][idx],
-                                              common_attr, [], exhead)
+                                              attr_dist[len(share_attr)][attr_num][num_party][idx],
+                                              share_attr, [], exhead)
                 exhead += exhead_
                 print(exhead)
             else:
@@ -116,7 +126,7 @@ if __name__ == '__main__':
                                epsilon_list=[epsilon], repeat=1,
                                classifier_num=25, generate=True, party=party)
 
-            print(f"Executed dataset = {data_name}, party = {party}, common = {common_attr}, epsilon = {epsilon}")
+            print(f"Executed dataset = {data_name}, party = {party}, common = {share_attr}, epsilon = {epsilon}")
 
         if args.task == 'TVD':
             server_start = time()
@@ -144,4 +154,5 @@ if __name__ == '__main__':
             result[str(args.epsilon)][data_name]["5"] = result[str(args.epsilon)][data_name]["5"] / repeat
             print(result)
             json.dump(result, out_file)
+        print(share_attr)
         print(f'\n\nOne client duration = {client_end-client_start}, Server duration = {server_end-server_start}')

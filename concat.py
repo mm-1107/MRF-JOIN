@@ -78,7 +78,7 @@ def synthetic(models):
     separator = set()
     for idx, start in enumerate(clique_marginal_list):
         clique = clique_marginal_list[idx+1]
-        # print(f"start = {start}, clique = {clique}")
+        print(f"start = {start}, clique = {clique}")
         if len(finished_attr) == 0:
             cond_attr = []
             for attr in start:

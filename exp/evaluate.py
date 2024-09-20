@@ -319,7 +319,7 @@ def svm_exp(data_name_list, method_list, exp_name, \
                 print_lock.acquire()
                 print('  data {}'.format(data_name))
                 print_lock.release()
-                
+
                 full_data = []
                 for k in range(5):
                     data_list, _ = utils.tools.read_csv('./exp_data/'+data_name+str(k)+'.csv')

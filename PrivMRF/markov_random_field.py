@@ -82,8 +82,8 @@ class MarkovRandomField:
             self.measure_set = set(self.measure_set[:self.config['init_measure_num']])
         else:
             self.measure_set = set(self.measure_set)
-        self.config['norm_query_number'] = 400
-        print('k:', self.config['norm_query_number'])
+        self.config['norm_query_number'] = 100
+        print('### Important param k:', self.config['norm_query_number'], "###")
         if self.config['use_exp_mech'] > 0:
             self.config['norm_query_number'] = int(1e4)
 

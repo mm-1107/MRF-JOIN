@@ -27,18 +27,18 @@ def data_num_to_str(map_list, np_data):
 # for simplicity, convert string data to int data, which can be accepted by models
 # and easy to evaluate. String data and int data are equivalent. Use postprocess to
 # convert outputs of models to string data if you need.
-def preprocess(data, party="", num_party=1, num_attr=0, common_attr="", headings=[], exhead=[]):
+def preprocess(data, party="", num_party=1, num_attr=0, common_attr=[], headings=[], exhead=[]):
     path = './preprocess'
     if not os.path.exists(path):
         os.mkdir(path)
     all_data_list, all_headings = tools.read_csv('./data/' + data + '.csv')
     data_list = np.array(all_data_list)
     if len(headings) == 0:
-        exhead += [common_attr]
+        exhead += common_attr
         headings = [eval(attr) for attr in all_headings if eval(attr) not in exhead]
         if num_party > 1:
             np.random.shuffle(headings)
-            headings = headings[:num_attr] + [common_attr]
+            headings = headings[:num_attr] + common_attr
             headings = list(set(headings))
     headings.sort()
 

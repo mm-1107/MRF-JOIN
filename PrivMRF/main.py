@@ -23,9 +23,10 @@ import time
 import sys
 from .preprocess import preprocess
 
-def run(data, domain, attr_hierarchy, exp_name, epsilon, task='TVD', p_config=None):
+def run(data, domain, attr_hierarchy, exp_name, epsilon, task='TVD',
+        p_config=None, share_attr=0):
     default_config = {
-
+        'share_attr': share_attr, # shared attribute idx
         'beta5':        0.00,   # construct inner Bayesian network
         'data':         'no_data_name',
 
@@ -124,8 +125,6 @@ def run(data, domain, attr_hierarchy, exp_name, epsilon, task='TVD', p_config=No
     config['exp_name'] = 'PrivMRF_'+ config['data'] + '_' + exp_name
     if attr_hierarchy is None:
         attr_hierarchy = get_one_level_hierarchy(domain)
-    print('PrivMRF')
-
 
     start_time = time.time()
 
@@ -172,9 +171,11 @@ def run(data, domain, attr_hierarchy, exp_name, epsilon, task='TVD', p_config=No
 def run_syn(data_name, exp_name, epsilon, task='TVD', party="A"):
     p_config = {}
     p_config['data'] = data_name
+    common_dict = {"adult": 0, "nltcs": 8, "acs": 12, "br2000": 3}
+    share_attr = common_dict[data_name]
 
     data, domain, attr_hierarchy = read_preprocessed_data(data_name, task)
-    model = run(data, domain, attr_hierarchy, exp_name, epsilon, task, p_config)
+    model = run(data, domain, attr_hierarchy, exp_name, epsilon, task, p_config, share_attr)
     print(f'run_syn, save model in ./temp/{exp_name}_party{party}_{data_name}_model.mrf')
     MarkovRandomField.save_model(model, f'./temp/{exp_name}_party{party}_{data_name}_model.mrf')
     data_list = model.synthetic_data('./out/' + 'PrivMRF_'+ data_name + '_' + exp_name + '.csv')
