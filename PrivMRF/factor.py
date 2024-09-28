@@ -108,10 +108,10 @@ class Factor:
         #     values = cp.log(values)
         # else:
         values = scipy.special.logsumexp(self.values, axis=sum_attr)
-        return Factor(self.domain.project(attr_set), values, np)
+        return Factor(self.domain.project(attr_set), values, xp)
 
     def exp(self):
-        return Factor(self.domain, np.exp(self.values), np)
+        return Factor(self.domain, np.exp(self.values), xp)
 
     def project(self, domain):
         if not isinstance(domain, Domain):
