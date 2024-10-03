@@ -12,13 +12,13 @@ from .domain import Domain
 from .attribute_hierarchy import Attribute
 import os
 import json
-gpu = False
+gpu = True
 if gpu:
     import cupy as cp
 
 class MarkovRandomField:
     def __init__(self, data, domain, graph, measure_list, attr_list, \
-        attr_to_level, noisy_data_num, config, gpu=False):
+        attr_to_level, noisy_data_num, config, gpu=True):
 
         self.data = data
         self.domain = domain
@@ -62,9 +62,9 @@ class MarkovRandomField:
             clique_graph.add_edge(clique1, clique2, weight=-len(set(clique1) & set(clique2)))
         self.junction_tree = nx.minimum_spanning_tree(clique_graph)
         if self.gpu:
-            xp = cp
+            xp = "cp"
         else:
-            xp = np
+            xp = "np"
         self.potential = Potential({clique: Factor.zeros(self.domain.project(clique), xp) for clique in self.maximal_cliques})
         size = sum(self.domain.project(clique).size() for clique in self.maximal_cliques)
         print('model size: {:.4e}'.format(size))
@@ -140,7 +140,7 @@ class MarkovRandomField:
             if gpu:
                 for measure in measure_dict:
                     temp = measure_dict[measure]
-                    measure_dict[measure] = Factor(temp.domain, temp.values, cp)
+                    measure_dict[measure] = Factor(temp.domain, temp.values, "cp")
 
         self.measure = Potential(measure_dict)
         self.marginal = None
@@ -214,9 +214,9 @@ class MarkovRandomField:
             # print('structural zeros', measure, tvd1, tvd2)
 
             if self.gpu:
-                xp = cp
+                xp = "cp"
             else:
-                xp = np
+                xp = "np"
 
             temp_list.append(measure)
             fact = Factor(self.domain.project(measure), measure_value, xp)
@@ -574,10 +574,10 @@ class MarkovRandomField:
                 measure_marginal = tools.dp_marginal_list(self.data, self.domain, [measure], self.marginal_noise, noise_type=self.config['noise_type'])
                 temp = measure_marginal[measure]
                 if self.gpu:
-                    self.measure[measure] = Factor(temp.domain, temp.values, cp)
+                    self.measure[measure] = Factor(temp.domain, temp.values, "cp")
                 else:
                     self.measure[measure] = temp
-                    self.measure_set.add(measure)
+                self.measure_set.add(measure)
 
                 for clique in self.maximal_cliques:
                     if set(measure) <= set(clique):
@@ -666,7 +666,7 @@ class MarkovRandomField:
         return measure_list
 
     def print_measure(self, print_measure):
-        marginal_dict, partition_func = self.cal_marginal_dict(self.potential, print_measure, to_cpu=False)
+        marginal_dict, partition_func = self.cal_marginal_dict(self.potential, print_measure, to_cpu=self.gpu)
         average = 0
         for measure in print_measure:
             bins = self.domain.project(measure).edge()
@@ -702,9 +702,9 @@ class MarkovRandomField:
 
         # query 1 norm
         query_result_list = []
-        marginal_dict, partition_func = self.cal_marginal_dict(self.potential, query_measure_list, to_cpu=False)
+        marginal_dict, partition_func = self.cal_marginal_dict(self.potential, query_measure_list, to_cpu=True)
         for measure in query_measure_list:
-            dist, noisy_dist = tools.dp_1norm(self.data, self.domain, measure, marginal_dict[measure], self.de_norm1_noise, to_cpu=False)
+            dist, noisy_dist = tools.dp_1norm(self.data, self.domain, measure, marginal_dict[measure], self.de_norm1_noise, to_cpu=True)
             # TVD (1 norm) of marginal is at least this value. Deduct it to compare marginals of different sizes fairly
             # However, it is not emperically better in adult dataset. There should be better ways to compare marginal with different size
             # 1. inherent TVD given by noise. 2. TVD tends to be large if the size of noisy marginal is large.
@@ -757,11 +757,11 @@ class MarkovRandomField:
         query_measure_list = list(set(query_measure_list))
 
         # query 1 norm
-        marginal_dict, partition_func = self.cal_marginal_dict(self.potential, query_measure_list, to_cpu=False)
+        marginal_dict, partition_func = self.cal_marginal_dict(self.potential, query_measure_list, to_cpu=True)
         query_measure_list = []
         query_score_list = []
         for measure in marginal_dict:
-            dist, noisy_dist = tools.dp_1norm(self.data, self.domain, measure, marginal_dict[measure], 0, to_cpu=False)
+            dist, noisy_dist = tools.dp_1norm(self.data, self.domain, measure, marginal_dict[measure], 0, to_cpu=True)
             query_measure_list.append(measure)
             query_score_list.append(dist)
 
@@ -837,9 +837,9 @@ class MarkovRandomField:
 
     def get_expanded_gradient(self, gradient):
         if self.gpu:
-            xp = cp
+            xp = "cp"
         else:
-            xp = np
+            xp = "np"
         expanded_gradient = Potential({clique: Factor.zeros(\
             self.domain.project(clique), xp) for clique in self.maximal_cliques})
         for marginal in gradient:
@@ -1037,7 +1037,6 @@ class MarkovRandomField:
         return data_list
 
     # generate a column according to marginal distribution and conditions using pandas
-    # cond: 既に合成した属性リスト，target: これから合成する1つの属性
     def pandas_generate_cond_column_data(self, clique_factor, cond, target):
         clique_factor = clique_factor.moveaxis(self.domain.attr_list)
         if len(cond) == 0:

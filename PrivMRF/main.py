@@ -110,9 +110,9 @@ def run(data, domain, attr_hierarchy, exp_name, epsilon, task='TVD',
 
     # There might be no enough resource to run PrivMRF on GPU
     # acs should be runned on cpu, nltcs is too small and doesn't have to be runned on GPU
-    # gpu = False
-    # if config['data'] == 'adult' or config['data'] == 'br2000':
-        # gpu = True
+    gpu = False
+    if config['data'] == 'adult' or config['data'] == 'br2000':
+        gpu = True
     if config['data'] == 'acs' or config['data'] == 'nltcs':
         default_config['max_measure_attr_num'] = 10
         default_config['max_measure_attr_num_privBayes'] = 9
@@ -144,7 +144,7 @@ def run(data, domain, attr_hierarchy, exp_name, epsilon, task='TVD',
     data_num = init_model.data_num
 
     model = MarkovRandomField(data, domain, graph, measure_list, \
-        attr_hierarchy, attr_to_level, data_num, config)
+        attr_hierarchy, attr_to_level, data_num, config, gpu=gpu)
     model.entropy_descent()
     # MarkovRandomField.save_model(model, './temp/' + config['data'] + '_model.mrf')
 
@@ -176,7 +176,8 @@ def run_syn(data_name, exp_name, epsilon, task='TVD', party="A"):
 
     data, domain, attr_hierarchy = read_preprocessed_data(data_name, task)
     model = run(data, domain, attr_hierarchy, exp_name, epsilon, task, p_config, share_attr)
-    print(f'run_syn, save model in ./temp/{exp_name}_party{party}_{data_name}_model.mrf')
-    MarkovRandomField.save_model(model, f'./temp/{exp_name}_{data_name}_{epsilon}_party{party}_model.mrf')
+    path = f'./temp/{exp_name}_{data_name}_{epsilon}_party{party}_model.mrf'
+    print(f'run_syn, save model in {path}')
+    MarkovRandomField.save_model(model, path)
     data_list = model.synthetic_data('./out/' + 'PrivMRF_'+ data_name + '_' + exp_name + '.csv')
-    return data_list
+    return data_list, path

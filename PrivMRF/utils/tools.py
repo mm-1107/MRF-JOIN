@@ -17,7 +17,7 @@ from bisect import bisect_left
 
 mp.mp.dps = 1000
 
-gpu = False
+gpu = True
 if gpu:
     import cupy as cp
 carest = False
@@ -90,7 +90,7 @@ def dp_TVD(TVD_map, data, domain, index_list, noise):
             histogram = histogramdd( index_list, bins)
         else:
             histogram, _= np.histogramdd(data[:, shift_index_list], bins=bins)
-        fact1 = Factor(domain, histogram, np)
+        fact1 = Factor(domain, histogram, "np")
         # print('!', domain.shape, '!', bins, '!', histogram.shape)
 
         temp_domain = domain.project([index_list[0]])
@@ -100,7 +100,7 @@ def dp_TVD(TVD_map, data, domain, index_list, noise):
             histogram = histogramdd( tuple(sorted(temp_index_list)), temp_domain.edge())
         else:
             histogram, _= np.histogramdd(data[:, temp_index_list], bins=temp_domain.edge())
-        fact2 = Factor(temp_domain, histogram, np)
+        fact2 = Factor(temp_domain, histogram, "np")
 
         temp_domain = domain.project([index_list[1]])
         # temp_index_list = temp_domain.attr_list
@@ -109,7 +109,7 @@ def dp_TVD(TVD_map, data, domain, index_list, noise):
             histogram = histogramdd( tuple(sorted(temp_index_list)), temp_domain.edge())
         else:
             histogram, _= np.histogramdd(data[:, temp_index_list], bins=temp_domain.edge())
-        fact3 = Factor(temp_domain, histogram, np)
+        fact3 = Factor(temp_domain, histogram, "np")
 
         data_num = len(data)
         fact4 = fact2.expand(domain) * fact3.expand(domain) / data_num

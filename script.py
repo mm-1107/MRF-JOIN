@@ -23,12 +23,6 @@ from PrivMRF.utils import tools
 import concat
 from time import time
 
-parser = argparse.ArgumentParser(description='manual to this script')
-parser.add_argument('--epsilon', type=float, default=0.8)
-parser.add_argument('--task', type=str, default='TVD') #tvd/svm
-parser.add_argument('--dataset', type=str, default='nltcs')
-parser.add_argument('--party', type=int, default=2)
-
 def eps_per_party(epsilon, num_party):
     total_to_party = {
          0.4: {2: 0.270},
@@ -37,6 +31,14 @@ def eps_per_party(epsilon, num_party):
          3.2: {2: 2.160}
     }
     return total_to_party[epsilon][num_party]
+
+
+parser = argparse.ArgumentParser(description='manual to this script')
+parser.add_argument('--epsilon', type=float, default=0.8)
+parser.add_argument('--task', type=str, default='TVD') #tvd/svm
+parser.add_argument('--dataset', type=str, default='nltcs')
+parser.add_argument('--party', type=int, default=2)
+
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -64,9 +66,8 @@ if __name__ == '__main__':
     #     "C": [6, 7, 8, 9, 10],
     #     "D": [9, 11, 12, 13, 14]
     #     }
-    # sequential composition
     epsilon = eps_per_party(args.epsilon, num_party)
-    common_dict = {"adult": [0], "nltcs": [7,8,9], "acs": [11,12], "br2000": [3,4]}
+    common_dict = {"adult": [0], "nltcs": [7], "acs": [12], "br2000": [3]}
     share_attr = common_dict[data_name]
 
     _, all_headings = tools.read_csv('./data/' + data_name + '.csv')
@@ -130,7 +131,7 @@ if __name__ == '__main__':
 
         if args.task == 'TVD':
             server_start = time()
-            concat_data = concat.concat(num_party=num_party, data_name=data_name)
+            concat_data = concat.concat(num_party=num_party, data_name=data_name, epsilon=epsilon)
             server_end = time()
             tmp_dict = concat.marginal_exp([concat_data], data_name)
             concat.eval_diff_MI(data_name=data_name, syn=concat_data)
@@ -141,10 +142,10 @@ if __name__ == '__main__':
         else:
             for k in range(5):
                 exp_name_ = exp_name+str(epsilon)+'_'+str(k)
-                concat.concat(num_party=num_party, data_name=data_name, exp_name=exp_name_)
+                concat.concat(num_party=num_party, data_name=data_name, exp_name=exp_name_,epsilon=epsilon)
             # exp_name = exp_name+str(epsilon_list[0])+'_'+str(k)
             run_experiment([data_name], method_list, exp_name+str(epsilon), task='SVM',
-                epsilon_list=[args.epsilon], repeat=1,
+                epsilon_list=[epsilon], repeat=1,
                 classifier_num=25, generate=False)
 
     if args.task == 'TVD':
@@ -152,7 +153,7 @@ if __name__ == '__main__':
             result[str(args.epsilon)][data_name]["3"] = result[str(args.epsilon)][data_name]["3"] / repeat
             result[str(args.epsilon)][data_name]["4"] = result[str(args.epsilon)][data_name]["4"] / repeat
             result[str(args.epsilon)][data_name]["5"] = result[str(args.epsilon)][data_name]["5"] / repeat
-            print(result)
+            print(result[str(args.epsilon)][data_name])
             json.dump(result, out_file)
         print(share_attr)
         print(f'\n\nOne client duration = {client_end-client_start}, Server duration = {server_end-server_start}')

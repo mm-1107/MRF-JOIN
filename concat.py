@@ -8,16 +8,24 @@ from exp.evaluate import k_way_marginal
 from PrivMRF.domain import Domain
 import json
 import itertools
+consistency = False
 
-def pandas_generate_cond_column_data(df, model, clique_factor, cond, target, all_attr_list):
+def mean_noisy_data_num(models):
+    mean_noisy_data_num = 0
+    for mrf in models:
+        mean_noisy_data_num += mrf.noisy_data_num
+    return round(mean_noisy_data_num / len(models))
+
+
+def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, target, all_attr_list):
     clique_factor = clique_factor.moveaxis(all_attr_list)
 
     if len(cond) == 0:
         # P[target]
         prob = clique_factor.project(target).values
-        df.loc[:, target] = generate_column_data(prob, model.noisy_data_num)
+        df.loc[:, target] = generate_column_data(prob, noisy_data_num)
     else:
-        # P[attr|cond_attr]??
+        # hist[target, cond_attr1, cond_attr2,...]
         marginal_value = clique_factor.project(cond + [target])
 
         attr_list = marginal_value.domain.attr_list.copy()
@@ -27,14 +35,8 @@ def pandas_generate_cond_column_data(df, model, clique_factor, cond, target, all
 
         marginal_value = marginal_value.moveaxis(attr_list).values
 
-        if model.config['enable_attribute_hierarchy']:
-            # TODO
-            attrs = [attr for attr in attr_list if attr < model.attr_num and model.attr_to_subattr[attr] in attr_list]
-            model.set_zero_for_hierarchy(marginal_value, attr_list, attrs)
-
         def foo(group):
             idx = group.name
-            # この辺を帰る？？
             vals = generate_column_data(marginal_value[idx], group.shape[0])
             # print(idx, target)
             # if map_attrB:
@@ -48,20 +50,32 @@ def pandas_generate_cond_column_data(df, model, clique_factor, cond, target, all
 
 
 def synthetic(models):
+    share_attr = []
     all_attr_list = []
     for mrf in models:
         attr_party = mrf.domain.attr_list
         print(f"attr = {attr_party}")
+        if len(share_attr) == 0:
+            share_attr = attr_party
+        else:
+            share_attr = set(share_attr) & set(attr_party)
         all_attr_list += attr_party
 
     all_attr_list = list(set(all_attr_list))
     print("All attribute: ", all_attr_list)
+    print("share_attr: ", share_attr)
     # all_attr_list = list(set(attrA+attrB))
-    data = np.zeros((models[0].noisy_data_num, len(all_attr_list)), dtype=int)
+    if consistency:
+        noisy_data_num = mean_noisy_data_num(models)
+    else:
+        noisy_data_num = models[0].noisy_data_num
+    data = np.zeros((noisy_data_num, len(all_attr_list)), dtype=int)
     df = pd.DataFrame(data, columns=all_attr_list)
     # belief propagation to get clique marginals and
     # generate data conditioned on separators
     clique_marginal_A, partition_func = models[0].belief_propagation(models[0].potential)
+
+    prob_for_consistency = dict()
     for mrf in models:
         clique_marginal, partition_func = mrf.belief_propagation(mrf.potential)
         for clique in clique_marginal:
@@ -69,9 +83,22 @@ def synthetic(models):
             # new_clique = tuple([attr+len(attrA)-1 for attr in clique])
             # TODO
             clique_marginal_A[clique] = clique_marginal[clique]
-
+            if consistency:
+                targets = set(share_attr) & set(clique)
+                if len(targets) > 0:
+                    print(targets, share_attr, clique)
+                    for target in targets:
+                        if target in prob_for_consistency:
+                            prob_for_consistency[target] += clique_marginal[clique].project(target).values
+                        else:
+                            prob_for_consistency[target] = clique_marginal[clique].project(target).values
         # clique_marginal_B[new_clique] = tmp_clique_marginal_B[clique]
         # clique_marginal_B.pop(clique)
+    for target in prob_for_consistency:
+        # Mean of shared attr
+        prob = prob_for_consistency[target] / len(models)
+        df.loc[:, target] = generate_column_data(prob, noisy_data_num)
+        print(f"# DEBUG Sum of 0 in {target} = {(df[target] == 0).sum()}")
     clique_marginal_list = list(clique_marginal_A.keys())
 
     finished_attr = set()
@@ -80,21 +107,24 @@ def synthetic(models):
         clique = clique_marginal_list[idx+1]
         print(f"start = {start}, clique = {clique}")
         if len(finished_attr) == 0:
-            cond_attr = []
+            cond_attr =  list(share_attr) if consistency else []
             for attr in start:
+                if attr in prob_for_consistency:
+                    finished_attr.add(attr)
+                    continue
                 print('  cond_attr: {}, attr: {}'.format(cond_attr, attr))
-                df = pandas_generate_cond_column_data(df, models[0],
+                df = pandas_generate_cond_column_data(df, noisy_data_num,
                     clique_marginal_A[start], cond_attr, attr, all_attr_list)
                 finished_attr.add(attr)
                 cond_attr.append(attr)
 
         separator = set(start) & set(clique)
         print('start: {}, clique: {}, sep: {}'.format(start, clique, separator))
-        cond_attr = list(separator)
+        cond_attr = list(share_attr) if list(separator) == [] else list(separator)
         for attr in clique:
             if attr not in finished_attr:
                 print('  cond_attr: {}, attr: {} {}/{}'.format(cond_attr, attr, len(finished_attr), len(all_attr_list)))
-                df = pandas_generate_cond_column_data(df, models[0],
+                df = pandas_generate_cond_column_data(df, noisy_data_num,
                     clique_marginal_A[clique], cond_attr,
                     attr, all_attr_list)
                 finished_attr.add(attr)
@@ -103,6 +133,8 @@ def synthetic(models):
             break
 
     print(df)
+    #print(f"Sum of 0 in {target} = {(df[list(share_attr)[0]] == 0).sum()}")
+
     data_list = list(df.to_numpy())
     # tools.write_csv(data_list, all_attr_list), path)
     return data_list
@@ -138,7 +170,7 @@ def synthetic_party(df, model, clique_marginal, all_attr_list, common_attr=[]):
             break
     return df
 
-def concat(num_party=2, data_name="acs", exp_name="test"):
+def concat(num_party=2, data_name="acs", exp_name="test", epsilon=0.4):
     _, all_attr_list = read_csv('./data/' + data_name + '.csv')
 
     # model = MarkovRandomField.load_model('./temp/party_' + data_name + '_model.mrf')
@@ -149,7 +181,9 @@ def concat(num_party=2, data_name="acs", exp_name="test"):
     models = []
     for party in parties:
         print(f"# Distirbution from Party {party} #")
-        models.append(MarkovRandomField.load_model(f'./temp/{exp_name}_party{party}_{data_name}_model.mrf'))
+        path = f'./temp/{exp_name}_{data_name}_{epsilon}_party{party}_model.mrf'
+        print(path)
+        models.append(MarkovRandomField.load_model(path))
 
     data_list = synthetic(models)
     write_csv(data_list, all_attr_list, './out/PrivMRF'+'_'+data_name+'_'+exp_name+'.csv')
