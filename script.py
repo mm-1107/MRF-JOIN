@@ -38,6 +38,7 @@ parser.add_argument('--epsilon', type=float, default=0.8)
 parser.add_argument('--task', type=str, default='TVD') #tvd/svm
 parser.add_argument('--dataset', type=str, default='nltcs')
 parser.add_argument('--party', type=int, default=2)
+parser.add_argument('--chain', type=bool, default=False)
 
 
 if __name__ == '__main__':
@@ -113,6 +114,8 @@ if __name__ == '__main__':
                                               share_attr, [], exhead)
                 exhead += exhead_
                 print(exhead)
+                if args.chain:
+                    share_attr = [exhead_[-1]]
             else:
                 preprocess(data_name)
             if args.task == 'TVD':
