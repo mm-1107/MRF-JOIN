@@ -17,6 +17,23 @@ def mean_noisy_data_num(models):
     return round(mean_noisy_data_num / len(models))
 
 
+def update_factor(clique_factor, mean_prob, target):
+    # if not isinstance(domain, Domain):
+    #     if not isinstance(domain, Iterable):
+    #         domain = [domain]
+    #     domain = self.domain.project(domain)
+    # assert(set(domain.attr_list) <= set(self.domain.attr_list))
+    # new_domain = self.domain.invert(domain)
+    # index_list = tuple(self.domain.index_list(new_domain))
+    before = clique_factor.project(target).values
+    attrs = clique_factor.domain.attr_list - [target]
+    domain_size = len(clique_factor.project(attrs).values)
+    # (mean_prob - before)
+    #values = np.sum(self.values, axis=index_list)
+    values = get_xp(self.xp).sum(self.values, axis=index_list)
+    return Factor(clique_factor.domain, values, clique_factor.xp)
+
+
 def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, target, all_attr_list):
     clique_factor = clique_factor.moveaxis(all_attr_list)
 
@@ -24,6 +41,7 @@ def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, ta
         # P[target]
         prob = clique_factor.project(target).values
         df.loc[:, target] = generate_column_data(prob, noisy_data_num)
+        print(f"marginal_value {target}={prob}")
     else:
         # hist[target, cond_attr1, cond_attr2,...]
         marginal_value = clique_factor.project(cond + [target])
@@ -34,7 +52,8 @@ def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, ta
         attr_list.append(target)
 
         marginal_value = marginal_value.moveaxis(attr_list).values
-
+        if len(cond) <= 2:
+            print(f"marginal_value {attr_list}={marginal_value}")
         def foo(group):
             idx = group.name
             vals = generate_column_data(marginal_value[idx], group.shape[0])
@@ -99,6 +118,7 @@ def synthetic(models):
         prob = prob_for_consistency[target] / len(models)
         df.loc[:, target] = generate_column_data(prob, noisy_data_num)
         print(f"# DEBUG Sum of 0 in {target} = {(df[target] == 0).sum()}")
+
     clique_marginal_list = list(clique_marginal_A.keys())
 
     finished_attr = set()
