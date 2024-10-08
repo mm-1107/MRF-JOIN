@@ -8,7 +8,6 @@ from exp.evaluate import k_way_marginal
 from PrivMRF.domain import Domain
 import json
 import itertools
-consistency = False
 
 def mean_noisy_data_num(models):
     mean_noisy_data_num = 0
@@ -26,12 +25,36 @@ def update_factor(clique_factor, mean_prob, target):
     # new_domain = self.domain.invert(domain)
     # index_list = tuple(self.domain.index_list(new_domain))
     before = clique_factor.project(target).values
-    attrs = clique_factor.domain.attr_list - [target]
-    domain_size = len(clique_factor.project(attrs).values)
-    # (mean_prob - before)
+    attrs = list(set(clique_factor.domain.attr_list) - set([target]))
+    domain_remains = clique_factor.project(attrs).domain
+    domain_size = domain_remains.size()
+    # index of domain list
+    index_list = clique_factor.domain.index_list(attrs)
+    target_index = clique_factor.domain.index_list([target])
+    # print(f"size of domain_remains = {domain_size}, remain index_list of {attrs} = {index_list}")
+    # print(f"index_list of {target} = {target_index}")
+    print("mean_prob", mean_prob, "before", before, "(mean_prob - before) / domain_size = ",(mean_prob - before) / domain_size)
+    # print("before clique_factor", clique_factor.values)
+    def func(marginal):
+        print("func before", marginal)
+        marginal = marginal + (mean_prob - before) / domain_size
+        num_negative = np.sum(marginal < 0)
+        while num_negative > 0:
+            num_neighbor = np.sum(marginal > 0)
+            neg_sum = np.sum(marginal, where=(marginal<0))
+            subtract = neg_sum / num_neighbor
+            print(subtract)
+            # fill 0 into negetive marginal
+            marginal = np.where(marginal <= 0, 0, marginal + subtract)
+            num_negative = np.sum(marginal < 0)
+        print("func after", marginal)
+        return marginal
+    # clique_factor.values = clique_factor.values + (mean_prob - before) / domain_size
+    clique_factor.values = np.apply_along_axis(func1d=func, axis=target_index[0], arr=clique_factor.values)
+    # print("after clique_factor", clique_factor.values)
     #values = np.sum(self.values, axis=index_list)
-    values = get_xp(self.xp).sum(self.values, axis=index_list)
-    return Factor(clique_factor.domain, values, clique_factor.xp)
+    # values = get_xp(self.xp).sum(self.values, axis=index_list)
+    return clique_factor
 
 
 def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, target, all_attr_list):
@@ -52,8 +75,8 @@ def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, ta
         attr_list.append(target)
 
         marginal_value = marginal_value.moveaxis(attr_list).values
-        if len(cond) <= 2:
-            print(f"marginal_value {attr_list}={marginal_value}")
+        # if len(cond) <= 2:
+        #     print(f"marginal_value {attr_list}={marginal_value}")
         def foo(group):
             idx = group.name
             vals = generate_column_data(marginal_value[idx], group.shape[0])
@@ -68,7 +91,7 @@ def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, ta
     return df
 
 
-def synthetic(models):
+def synthetic(models, consistency):
     share_attr = []
     all_attr_list = []
     for mrf in models:
@@ -93,12 +116,12 @@ def synthetic(models):
     # belief propagation to get clique marginals and
     # generate data conditioned on separators
     clique_marginal_A, partition_func = models[0].belief_propagation(models[0].potential)
-
     prob_for_consistency = dict()
+    cnt_for_consistency = dict()
     for mrf in models:
         clique_marginal, partition_func = mrf.belief_propagation(mrf.potential)
         for clique in clique_marginal:
-            print(clique)
+            print(clique, prob_for_consistency.keys())
             # new_clique = tuple([attr+len(attrA)-1 for attr in clique])
             # TODO
             clique_marginal_A[clique] = clique_marginal[clique]
@@ -108,18 +131,25 @@ def synthetic(models):
                     print(targets, share_attr, clique)
                     for target in targets:
                         if target in prob_for_consistency:
+                            cnt_for_consistency[target] += 1
                             prob_for_consistency[target] += clique_marginal[clique].project(target).values
                         else:
+                            cnt_for_consistency[target] = 1
                             prob_for_consistency[target] = clique_marginal[clique].project(target).values
+                        print("target, cnt", prob_for_consistency[target], cnt_for_consistency[target])
         # clique_marginal_B[new_clique] = tmp_clique_marginal_B[clique]
         # clique_marginal_B.pop(clique)
+    clique_marginal_list = list(clique_marginal_A.keys())
     for target in prob_for_consistency:
         # Mean of shared attr
-        prob = prob_for_consistency[target] / len(models)
-        df.loc[:, target] = generate_column_data(prob, noisy_data_num)
+        print("cnt_for_consistency[target]=", cnt_for_consistency[target])
+        mean_prob = prob_for_consistency[target] / cnt_for_consistency[target]
+        df.loc[:, target] = generate_column_data(mean_prob, noisy_data_num)
         print(f"# DEBUG Sum of 0 in {target} = {(df[target] == 0).sum()}")
-
-    clique_marginal_list = list(clique_marginal_A.keys())
+        for clique in clique_marginal_list:
+            if target in clique:
+                print("if target in clique:", clique)
+                clique_marginal_A[clique] = update_factor(clique_marginal_A[clique], mean_prob, target)
 
     finished_attr = set()
     separator = set()
@@ -127,11 +157,11 @@ def synthetic(models):
         clique = clique_marginal_list[idx+1]
         print(f"start = {start}, clique = {clique}")
         if len(finished_attr) == 0:
-            cond_attr =  list(share_attr) if consistency else []
+            cond_attr =  []
             for attr in start:
-                if attr in prob_for_consistency:
-                    finished_attr.add(attr)
-                    continue
+                # if attr in prob_for_consistency:
+                #     finished_attr.add(attr)
+                #     continue
                 print('  cond_attr: {}, attr: {}'.format(cond_attr, attr))
                 df = pandas_generate_cond_column_data(df, noisy_data_num,
                     clique_marginal_A[start], cond_attr, attr, all_attr_list)
@@ -159,38 +189,8 @@ def synthetic(models):
     # tools.write_csv(data_list, all_attr_list), path)
     return data_list
 
-def synthetic_party(df, model, clique_marginal, all_attr_list, common_attr=[]):
-    clique_marginal_list = list(clique_marginal.keys())
-    finished_attr = set()
-    separator = set()
-    for idx, start in enumerate(clique_marginal_list):
-        clique = clique_marginal_list[idx+1]
-        # print(f"start = {start}, clique = {clique}")
-        if len(finished_attr) == 0:
-            cond_attr = common_attr
-            for attr in start:
-                print('  cond_attr: {}, attr: {}'.format(cond_attr, attr))
-                df = pandas_generate_cond_column_data(df, model,
-                    clique_marginal[start], cond_attr, attr, all_attr_list)
-                finished_attr.add(attr)
-                cond_attr.append(attr)
 
-        separator = set(start) & set(clique)
-        print('start: {}, clique: {}, sep: {}'.format(start, clique, separator))
-        cond_attr = list(separator)
-        for attr in clique:
-            if attr not in finished_attr:
-                print('  cond_attr: {}, attr: {} {}/{}'.format(cond_attr, attr, len(finished_attr), len(all_attr_list)))
-                df = pandas_generate_cond_column_data(df, model,
-                    clique_marginal[clique], cond_attr,
-                    attr, all_attr_list)
-                finished_attr.add(attr)
-                cond_attr.append(attr)
-        if idx == len(clique_marginal_list) - 2:
-            break
-    return df
-
-def concat(num_party=2, data_name="acs", exp_name="test", epsilon=0.4):
+def concat(num_party=2, data_name="acs", exp_name="test", epsilon=0.4, consistency=False):
     _, all_attr_list = read_csv('./data/' + data_name + '.csv')
 
     # model = MarkovRandomField.load_model('./temp/party_' + data_name + '_model.mrf')
@@ -205,7 +205,7 @@ def concat(num_party=2, data_name="acs", exp_name="test", epsilon=0.4):
         print(path)
         models.append(MarkovRandomField.load_model(path))
 
-    data_list = synthetic(models)
+    data_list = synthetic(models, consistency)
     write_csv(data_list, all_attr_list, './out/PrivMRF'+'_'+data_name+'_'+exp_name+'.csv')
     return data_list
 
@@ -256,7 +256,9 @@ def eval_diff_MI(data_name, syn):
         diff += abs(raw_MI - syn_MI)
         num_pairs += 1
         print(f"Mutual information of {attr_A} and {attr_B} -> raw: {raw_MI}, syn: {syn_MI}")
-    print("Evaluation of mutual information =", diff/num_pairs)
+    mid = diff/num_pairs
+    print("Evaluation of mutual information =", mid)
+    return mid
 
 if __name__ == '__main__':
     data_name = "dummy_12_8_100000"

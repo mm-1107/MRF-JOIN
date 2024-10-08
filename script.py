@@ -99,11 +99,18 @@ if __name__ == '__main__':
         result = {}
     if str(args.epsilon) not in result:
         result[str(args.epsilon)] = {}
-    if data_name not in result[str(args.epsilon)]:
-        result[str(args.epsilon)][data_name] = {}
-    result[str(args.epsilon)][data_name]["3"] = 0
-    result[str(args.epsilon)][data_name]["4"] = 0
-    result[str(args.epsilon)][data_name]["5"] = 0
+    if "w/o co" not in result[str(args.epsilon)]:
+        result[str(args.epsilon)]["w/o co"] = {}
+    if "w/ co" not in result[str(args.epsilon)]:
+        result[str(args.epsilon)]["w/ co"] = {}
+    result[str(args.epsilon)]["w/o co"]["3"] = 0
+    result[str(args.epsilon)]["w/o co"]["4"] = 0
+    result[str(args.epsilon)]["w/o co"]["5"] = 0
+    result[str(args.epsilon)]["w/o co"]["mid"] = 0
+    result[str(args.epsilon)]["w/ co"]["3"] = 0
+    result[str(args.epsilon)]["w/ co"]["4"] = 0
+    result[str(args.epsilon)]["w/ co"]["5"] = 0
+    result[str(args.epsilon)]["w/ co"]["mid"] = 0
     for i in range(repeat):
         exhead = []
         for idx, party in enumerate(parties):
@@ -133,15 +140,35 @@ if __name__ == '__main__':
             print(f"Executed dataset = {data_name}, party = {party}, common = {share_attr}, epsilon = {epsilon}")
 
         if args.task == 'TVD':
+            # server_start = time()
+            concat_data = concat.concat(num_party=num_party,
+                                        data_name=data_name,
+                                        epsilon=epsilon,
+                                        consistency=False)
+            # server_end = time()
+            tmp_dict = concat.marginal_exp([concat_data], data_name)
+            mid = concat.eval_diff_MI(data_name=data_name, syn=concat_data)
+
+            # print(tmp_dict)
+            result[str(args.epsilon)]["w/o co"]["3"] += tmp_dict["3"][0]
+            result[str(args.epsilon)]["w/o co"]["4"] += tmp_dict["4"][0]
+            result[str(args.epsilon)]["w/o co"]["5"] += tmp_dict["5"][0]
+            result[str(args.epsilon)]["w/o co"]["mid"] += mid
+
             server_start = time()
-            concat_data = concat.concat(num_party=num_party, data_name=data_name, epsilon=epsilon)
+            concat_data = concat.concat(num_party=num_party,
+                                        data_name=data_name,
+                                        epsilon=epsilon,
+                                        consistency=True)
             server_end = time()
             tmp_dict = concat.marginal_exp([concat_data], data_name)
-            concat.eval_diff_MI(data_name=data_name, syn=concat_data)
-            # print(tmp_dict)
-            result[str(args.epsilon)][data_name]["3"] += tmp_dict["3"][0]
-            result[str(args.epsilon)][data_name]["4"] += tmp_dict["4"][0]
-            result[str(args.epsilon)][data_name]["5"] += tmp_dict["5"][0]
+            mid = concat.eval_diff_MI(data_name=data_name, syn=concat_data)
+
+            result[str(args.epsilon)]["w/ co"]["3"] += tmp_dict["3"][0]
+            result[str(args.epsilon)]["w/ co"]["4"] += tmp_dict["4"][0]
+            result[str(args.epsilon)]["w/ co"]["5"] += tmp_dict["5"][0]
+            result[str(args.epsilon)]["w/ co"]["mid"] += mid
+
         else:
             for k in range(5):
                 exp_name_ = exp_name+str(epsilon)+'_'+str(k)
@@ -153,10 +180,12 @@ if __name__ == '__main__':
 
     if args.task == 'TVD':
         with open(path, 'w') as out_file:
-            result[str(args.epsilon)][data_name]["3"] = result[str(args.epsilon)][data_name]["3"] / repeat
-            result[str(args.epsilon)][data_name]["4"] = result[str(args.epsilon)][data_name]["4"] / repeat
-            result[str(args.epsilon)][data_name]["5"] = result[str(args.epsilon)][data_name]["5"] / repeat
-            print(result[str(args.epsilon)][data_name])
+            for way in result[str(args.epsilon)]["w/ co"]:
+                result[str(args.epsilon)]["w/ co"][way] = result[str(args.epsilon)]["w/ co"][way] / repeat
+            for way in result[str(args.epsilon)]["w/o co"]:
+                result[str(args.epsilon)]["w/o co"][way] = result[str(args.epsilon)]["w/o co"][way] / repeat
+
+            print(result[str(args.epsilon)])
+            print(f"Result is saved in {path}")
             json.dump(result, out_file)
-        print(share_attr)
         print(f'\n\nOne client duration = {client_end-client_start}, Server duration = {server_end-server_start}')
