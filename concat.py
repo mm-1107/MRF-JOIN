@@ -16,44 +16,79 @@ def mean_noisy_data_num(models):
     return round(mean_noisy_data_num / len(models))
 
 
+def update_factor_by_data_num(clique_factor, mean_num):
+    before  = clique_factor.sum()
+    print("before update_factor_by_data_num", before)
+    clique_factor.values = clique_factor.values + (mean_num - before) * (clique_factor.values / before)
+    print("after update_factor_by_data_num", clique_factor.sum())
+    return clique_factor
+
+
 def update_factor(clique_factor, mean_prob, target):
-    # if not isinstance(domain, Domain):
-    #     if not isinstance(domain, Iterable):
-    #         domain = [domain]
-    #     domain = self.domain.project(domain)
-    # assert(set(domain.attr_list) <= set(self.domain.attr_list))
-    # new_domain = self.domain.invert(domain)
-    # index_list = tuple(self.domain.index_list(new_domain))
     before = clique_factor.project(target).values
     attrs = list(set(clique_factor.domain.attr_list) - set([target]))
     domain_remains = clique_factor.project(attrs).domain
     domain_size = domain_remains.size()
+    print(f"#DEBUG before clique_factor.project({attrs[0]}).values {clique_factor.project(attrs[0]).values}")
     # index of domain list
     index_list = clique_factor.domain.index_list(attrs)
     target_index = clique_factor.domain.index_list([target])
     # print(f"size of domain_remains = {domain_size}, remain index_list of {attrs} = {index_list}")
     # print(f"index_list of {target} = {target_index}")
-    print("mean_prob", mean_prob, "before", before, "(mean_prob - before) / domain_size = ",(mean_prob - before) / domain_size)
     # print("before clique_factor", clique_factor.values)
+    print("mean_prob", mean_prob, "before", before, "diff", (mean_prob - before))
     def func(marginal):
-        print("func before", marginal)
+        #print("func before", marginal)
+        # marginal = marginal + (mean_prob - before) * (marginal / before)
         marginal = marginal + (mean_prob - before) / domain_size
-        num_negative = np.sum(marginal < 0)
-        while num_negative > 0:
-            num_neighbor = np.sum(marginal > 0)
-            neg_sum = np.sum(marginal, where=(marginal<0))
-            subtract = neg_sum / num_neighbor
-            print(subtract)
-            # fill 0 into negetive marginal
-            marginal = np.where(marginal <= 0, 0, marginal + subtract)
-            num_negative = np.sum(marginal < 0)
-        print("func after", marginal)
+        #num_neighbor += np.where(marginal > 0, 1, 0)
+        #num_negative = np.sum(marginal < 0)
+        #print("func after", marginal, "num_negative", num_negative)
+        #if num_negative > 0:
+        #    print("num_neighbor =", num_neighbor)
+        #    print("neg_sum =", neg_sum)
+        #    neg_sum += np.where(marginal < 0, marginal, 0)
+        #    num_neighbor = np.sum(marginal > 0)
+        #    neg_sum = np.sum(marginal, where=(marginal<0))
+        #    subtract = neg_sum / num_neighbor
+        #    print(subtract)
+        #    # fill 0 into negetive marginal
+        #    marginal = np.where(marginal <= 0, 0, marginal + subtract)
+        #    num_negative = np.sum(marginal < 0)
+        #print("func after", marginal)
         return marginal
     # clique_factor.values = clique_factor.values + (mean_prob - before) / domain_size
-    clique_factor.values = np.apply_along_axis(func1d=func, axis=target_index[0], arr=clique_factor.values)
+    clique_factor.values = np.apply_along_axis(func1d=func, axis=target_index[0], 
+                                               arr=clique_factor.values)
+    
+    while np.sum(clique_factor.values < 0) > 0:
+        neg_sum = np.zeros_like(before)
+        num_neighbor = np.zeros_like(before)
+        def sum_neg(marginal,neg_sum,num_neighbor):
+            num_neighbor += np.where(marginal > 0, 1, 0)
+            #print("func after", marginal, "num_negative", num_negative)
+            #print("num_neighbor =", num_neighbor)
+            #print("neg_sum =", neg_sum)
+            neg_sum += np.where(marginal < 0, marginal, 0)
+            return marginal
+        np.apply_along_axis(func1d=sum_neg,
+                            axis=target_index[0],
+                            arr=clique_factor.values,
+                            neg_sum=neg_sum,
+                            num_neighbor=num_neighbor)
+        print("neg_sum =", neg_sum)
+        subtract =  np.zeros_like(before)
+        for domain_idx in range(neg_sum.shape[0]):
+            subtract[domain_idx] = neg_sum[domain_idx] / num_neighbor[domain_idx]
+    
+        def neg(marginal):
+            marginal = np.where(marginal <= 0, 0, marginal + subtract)
+            return marginal
+        clique_factor.values = np.apply_along_axis(func1d=neg, axis=target_index[0], 
+                                                    arr=clique_factor.values)
+    print(f"#DEBUG after clique_factor.project({attrs[0]}).values {clique_factor.project(attrs[0]).values}")
+    print("After num_negative", np.sum(clique_factor.values < 0))
     # print("after clique_factor", clique_factor.values)
-    #values = np.sum(self.values, axis=index_list)
-    # values = get_xp(self.xp).sum(self.values, axis=index_list)
     return clique_factor
 
 
@@ -123,9 +158,9 @@ def synthetic(models, consistency):
         for clique in clique_marginal:
             print(clique, prob_for_consistency.keys())
             # new_clique = tuple([attr+len(attrA)-1 for attr in clique])
-            # TODO
             clique_marginal_A[clique] = clique_marginal[clique]
             if consistency:
+                clique_marginal_A[clique] = update_factor_by_data_num(clique_marginal_A[clique], noisy_data_num)
                 targets = set(share_attr) & set(clique)
                 if len(targets) > 0:
                     print(targets, share_attr, clique)
@@ -142,15 +177,16 @@ def synthetic(models, consistency):
     clique_marginal_list = list(clique_marginal_A.keys())
     for target in prob_for_consistency:
         # Mean of shared attr
-        print("cnt_for_consistency[target]=", cnt_for_consistency[target])
         mean_prob = prob_for_consistency[target] / cnt_for_consistency[target]
-        df.loc[:, target] = generate_column_data(mean_prob, noisy_data_num)
-        print(f"# DEBUG Sum of 0 in {target} = {(df[target] == 0).sum()}")
+        #mean_prob = mean_prob + (noisy_data_num - mean_prob.sum()) * (mean_prob / mean_prob.sum())
+        #df.loc[:, target] = generate_column_data(mean_prob, noisy_data_num)
+        #print(f"# DEBUG Sum of 0 in {target} = {(df[target] == 0).sum()}")
         for clique in clique_marginal_list:
             if target in clique:
                 print("if target in clique:", clique)
+                #clique_marginal_A[clique] = update_factor_by_data_num(clique_marginal_A[clique], noisy_data_num)
                 clique_marginal_A[clique] = update_factor(clique_marginal_A[clique], mean_prob, target)
-
+                print("#DEBUG  clique_marginal_A[clique].project(target).values",  clique_marginal_A[clique].project(target).values)
     finished_attr = set()
     separator = set()
     for idx, start in enumerate(clique_marginal_list):

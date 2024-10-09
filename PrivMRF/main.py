@@ -95,7 +95,7 @@ def run(data, domain, attr_hierarchy, exp_name, epsilon, task='TVD',
             default_config['beta3'] = 0.10 # query L_1 norms
             default_config['beta4'] = 0.30 # marginal distributions of newly selected marginals
 
-            default_config['t'] = 0.8
+            default_config['t'] = 0.6
             # beta2, beta4 is no longer uesful, we use t to allocate budget for marginal distribution
             # we ensure that beta2 + beta4 = 1 - (beta1 + beta3)
 

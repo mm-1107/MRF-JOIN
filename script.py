@@ -57,7 +57,7 @@ if __name__ == '__main__':
     exp_name = 'test'
 
     # number of experiments
-    repeat = 1
+    repeat = 10
 
     num_party = args.party
 
