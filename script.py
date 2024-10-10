@@ -122,10 +122,8 @@ if __name__ == '__main__':
                                               share_attr, [], exhead)
                 exhead += exhead_
                 exhead = list(set(exhead))
-                print(exhead)
                 if args.chain:
                     share_attr = [exhead_[-1]] if exhead_[-1] != share_attr[0] else [exhead_[-2]]
-                    print("exhead_[-1]", exhead_[-1], share_attr)
             else:
                 preprocess(data_name)
             if args.task == 'TVD':

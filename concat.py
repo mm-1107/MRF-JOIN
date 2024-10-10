@@ -109,13 +109,16 @@ def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, ta
 def synthetic(models, consistency):
     share_attr = []
     all_attr_list = []
-    for mrf in models:
+    for idx, mrf in enumerate(models):
         attr_party = mrf.domain.attr_list
         print(f"attr = {attr_party}")
-        if len(share_attr) == 0:
+        if idx == 0:
             share_attr = attr_party
+        elif idx == 1:
+            share_attr = list(set(share_attr) & set(attr_party))
         else:
-            share_attr = set(share_attr) & set(attr_party)
+            share_attr += list(set(all_attr_list) & set(attr_party))
+        print("share_attr", share_attr)
         all_attr_list += attr_party
 
     all_attr_list = list(set(all_attr_list))
