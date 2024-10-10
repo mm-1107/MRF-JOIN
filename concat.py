@@ -38,37 +38,17 @@ def update_factor(clique_factor, mean_prob, target):
     # print("before clique_factor", clique_factor.values)
     print("mean_prob", mean_prob, "before", before, "diff", (mean_prob - before))
     def func(marginal):
-        #print("func before", marginal)
-        # marginal = marginal + (mean_prob - before) * (marginal / before)
         marginal = marginal + (mean_prob - before) / domain_size
-        #num_neighbor += np.where(marginal > 0, 1, 0)
-        #num_negative = np.sum(marginal < 0)
-        #print("func after", marginal, "num_negative", num_negative)
-        #if num_negative > 0:
-        #    print("num_neighbor =", num_neighbor)
-        #    print("neg_sum =", neg_sum)
-        #    neg_sum += np.where(marginal < 0, marginal, 0)
-        #    num_neighbor = np.sum(marginal > 0)
-        #    neg_sum = np.sum(marginal, where=(marginal<0))
-        #    subtract = neg_sum / num_neighbor
-        #    print(subtract)
-        #    # fill 0 into negetive marginal
-        #    marginal = np.where(marginal <= 0, 0, marginal + subtract)
-        #    num_negative = np.sum(marginal < 0)
-        #print("func after", marginal)
         return marginal
     # clique_factor.values = clique_factor.values + (mean_prob - before) / domain_size
-    clique_factor.values = np.apply_along_axis(func1d=func, axis=target_index[0], 
+    clique_factor.values = np.apply_along_axis(func1d=func, axis=target_index[0],
                                                arr=clique_factor.values)
-    
+
     while np.sum(clique_factor.values < 0) > 0:
         neg_sum = np.zeros_like(before)
         num_neighbor = np.zeros_like(before)
         def sum_neg(marginal,neg_sum,num_neighbor):
             num_neighbor += np.where(marginal > 0, 1, 0)
-            #print("func after", marginal, "num_negative", num_negative)
-            #print("num_neighbor =", num_neighbor)
-            #print("neg_sum =", neg_sum)
             neg_sum += np.where(marginal < 0, marginal, 0)
             return marginal
         np.apply_along_axis(func1d=sum_neg,
@@ -80,11 +60,11 @@ def update_factor(clique_factor, mean_prob, target):
         subtract =  np.zeros_like(before)
         for domain_idx in range(neg_sum.shape[0]):
             subtract[domain_idx] = neg_sum[domain_idx] / num_neighbor[domain_idx]
-    
+
         def neg(marginal):
             marginal = np.where(marginal <= 0, 0, marginal + subtract)
             return marginal
-        clique_factor.values = np.apply_along_axis(func1d=neg, axis=target_index[0], 
+        clique_factor.values = np.apply_along_axis(func1d=neg, axis=target_index[0],
                                                     arr=clique_factor.values)
     print(f"#DEBUG after clique_factor.project({attrs[0]}).values {clique_factor.project(attrs[0]).values}")
     print("After num_negative", np.sum(clique_factor.values < 0))

@@ -57,7 +57,7 @@ if __name__ == '__main__':
     exp_name = 'test'
 
     # number of experiments
-    repeat = 10
+    repeat = 1
 
     num_party = args.party
 
@@ -91,7 +91,8 @@ if __name__ == '__main__':
             16: {2: [6,7]},
         }
     }
-    path = f'./result/{data_name}_{num_party}party_{args.task}.json'
+    chain_bool = "chain" if args.chain else ""
+    path = f'./result/{data_name}_{num_party}party_{chain_bool}_{args.task}.json'
     if os.path.exists(path):
         with open(path, 'r') as in_file:
             result = json.load(in_file)
@@ -120,9 +121,11 @@ if __name__ == '__main__':
                                               attr_dist[len(share_attr)][attr_num][num_party][idx],
                                               share_attr, [], exhead)
                 exhead += exhead_
+                exhead = list(set(exhead))
                 print(exhead)
                 if args.chain:
-                    share_attr = [exhead_[-1]]
+                    share_attr = [exhead_[-1]] if exhead_[-1] != share_attr[0] else [exhead_[-2]]
+                    print("exhead_[-1]", exhead_[-1], share_attr)
             else:
                 preprocess(data_name)
             if args.task == 'TVD':
@@ -172,7 +175,9 @@ if __name__ == '__main__':
         else:
             for k in range(5):
                 exp_name_ = exp_name+str(epsilon)+'_'+str(k)
-                concat.concat(num_party=num_party, data_name=data_name, exp_name=exp_name_,epsilon=epsilon)
+                concat.concat(num_party=num_party, data_name=data_name,
+                              exp_name=exp_name_,epsilon=epsilon,
+                              consistency=True)
             # exp_name = exp_name+str(epsilon_list[0])+'_'+str(k)
             run_experiment([data_name], method_list, exp_name+str(epsilon), task='SVM',
                 epsilon_list=[epsilon], repeat=1,
