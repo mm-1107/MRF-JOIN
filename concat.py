@@ -8,6 +8,7 @@ from exp.evaluate import k_way_marginal
 from PrivMRF.domain import Domain
 import json
 import itertools
+import cupy as cp
 
 def mean_noisy_data_num(models):
     mean_noisy_data_num = 0
@@ -25,6 +26,7 @@ def update_factor_by_data_num(clique_factor, mean_num):
 
 
 def update_factor(clique_factor, mean_prob, target):
+    xp = cp if clique_factor.xp == "cp"  else np
     before = clique_factor.project(target).values
     attrs = list(set(clique_factor.domain.attr_list) - set([target]))
     domain_remains = clique_factor.project(attrs).domain
@@ -41,34 +43,33 @@ def update_factor(clique_factor, mean_prob, target):
         marginal = marginal + (mean_prob - before) / domain_size
         return marginal
     # clique_factor.values = clique_factor.values + (mean_prob - before) / domain_size
-    clique_factor.values = np.apply_along_axis(func1d=func, axis=target_index[0],
+    clique_factor.values = xp.apply_along_axis(func1d=func, axis=target_index[0],
                                                arr=clique_factor.values)
 
-    while np.sum(clique_factor.values < 0) > 0:
-        neg_sum = np.zeros_like(before)
-        num_neighbor = np.zeros_like(before)
+    while xp.sum(clique_factor.values < 0) > 0:
+        neg_sum = xp.zeros_like(before)
+        num_neighbor = xp.zeros_like(before)
         def sum_neg(marginal,neg_sum,num_neighbor):
-            num_neighbor += np.where(marginal > 0, 1, 0)
-            neg_sum += np.where(marginal < 0, marginal, 0)
+            num_neighbor += xp.where(marginal > 0, 1, 0)
+            neg_sum += xp.where(marginal < 1e-5, marginal, 0)
             return marginal
-        np.apply_along_axis(func1d=sum_neg,
-                            axis=target_index[0],
+        xp.apply_along_axis(func1d=sum_neg,
+                             axis=target_index[0],
                             arr=clique_factor.values,
                             neg_sum=neg_sum,
                             num_neighbor=num_neighbor)
         print("neg_sum =", neg_sum)
-        subtract =  np.zeros_like(before)
+        subtract =  xp.zeros_like(before)
         for domain_idx in range(neg_sum.shape[0]):
             subtract[domain_idx] = neg_sum[domain_idx] / num_neighbor[domain_idx]
 
         def neg(marginal):
-            marginal = np.where(marginal <= 0, 0, marginal + subtract)
+            marginal = xp.where(marginal <= 0, 0, marginal + subtract)
             return marginal
-        clique_factor.values = np.apply_along_axis(func1d=neg, axis=target_index[0],
+        clique_factor.values = xp.apply_along_axis(func1d=neg, axis=target_index[0],
                                                     arr=clique_factor.values)
     print(f"#DEBUG after clique_factor.project({attrs[0]}).values {clique_factor.project(attrs[0]).values}")
-    print("After num_negative", np.sum(clique_factor.values < 0))
-    # print("after clique_factor", clique_factor.values)
+    print("After num_negative", xp.sum(clique_factor.values < 0))
     return clique_factor
 
 

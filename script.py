@@ -175,7 +175,7 @@ if __name__ == '__main__':
                 exp_name_ = exp_name+str(epsilon)+'_'+str(k)
                 concat.concat(num_party=num_party, data_name=data_name,
                               exp_name=exp_name_,epsilon=epsilon,
-                              consistency=True)
+                              consistency=False)
             # exp_name = exp_name+str(epsilon_list[0])+'_'+str(k)
             run_experiment([data_name], method_list, exp_name+str(epsilon), task='SVM',
                 epsilon_list=[epsilon], repeat=1,
