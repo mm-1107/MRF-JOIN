@@ -141,12 +141,13 @@ if __name__ == '__main__':
             print(f"Executed dataset = {data_name}, party = {party}, common = {share_attr}, epsilon = {epsilon}")
 
         if args.task == 'TVD':
-            # server_start = time()
+            server_start = time()
             concat_data = concat.concat(num_party=num_party,
                                         data_name=data_name,
                                         epsilon=epsilon,
                                         consistency=False)
-            # server_end = time()
+            server_end = time()
+            print(f'\n\n w/o CO Server duration = {server_end-server_start}')
             tmp_dict = concat.marginal_exp([concat_data], data_name)
             mid = concat.eval_diff_MI(data_name=data_name, syn=concat_data)
 
@@ -191,4 +192,4 @@ if __name__ == '__main__':
             print(result[str(args.epsilon)])
             print(f"Result is saved in {path}")
             json.dump(result, out_file)
-        print(f'\n\nOne client duration = {client_end-client_start}, Server duration = {server_end-server_start}')
+        print(f'\n\nOne client duration = {client_end-client_start}, w/ CO Server duration = {server_end-server_start}')

@@ -37,7 +37,7 @@ def preprocess(data, party="", num_party=1, num_attr=0, common_attr=[], headings
         exhead += common_attr
         headings = [eval(attr) for attr in all_headings if eval(attr) not in exhead]
         if num_party > 1:
-            # np.random.shuffle(headings)
+            np.random.shuffle(headings)
             headings = headings[:num_attr] + common_attr
             headings = list(set(headings))
     headings.sort()

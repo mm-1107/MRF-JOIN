@@ -9,6 +9,7 @@ from PrivMRF.domain import Domain
 import json
 import itertools
 import cupy as cp
+import multiprocessing
 
 def mean_noisy_data_num(models):
     mean_noisy_data_num = 0
@@ -25,49 +26,115 @@ def update_factor_by_data_num(clique_factor, mean_num):
     return clique_factor
 
 
+def parallel_apply_along_axis(func1d, axis, arr, *args, **kwargs):
+    """
+    Like numpy.apply_along_axis(), but takes advantage of multiple
+    cores.
+    """
+    # Effective axis where apply_along_axis() will be applied by each
+    # worker (any non-zero axis number would work, so as to allow the use
+    # of `np.array_split()`, which is only done on axis 0):
+    effective_axis = 1 if axis == 0 else axis
+    if effective_axis != axis:
+        arr = arr.swapaxes(axis, effective_axis)
+
+    # Chunks for the mapping (only a few chunks):
+    chunks = [(func1d, effective_axis, sub_arr, args, kwargs)
+              for sub_arr in np.array_split(arr, multiprocessing.cpu_count())]
+
+    pool = multiprocessing.Pool()
+    individual_results = pool.map(unpacking_apply_along_axis, chunks)
+    # Freeing the workers:
+    pool.close()
+    pool.join()
+
+    return xp.concatenate(individual_results)
+
+
+def unpacking_apply_along_axis(all_args):
+    """
+    Like numpy.apply_along_axis(), but with arguments in a tuple
+    instead.
+
+    This function is useful with multiprocessing.Pool().map(): (1)
+    map() only handles functions that take a single argument, and (2)
+    this function can generally be imported from a module, as required
+    by map().
+    """
+    (func1d, axis, arr, args, kwargs) = all_args
+    return np.apply_along_axis(func1d, axis, arr, *args, **kwargs)
+
+
+def func1d(marginal, xp, sub, target_dom_size):
+    marginal = marginal + sub
+    #cnt = 0
+    while True:
+        #cnt += 1
+        #if cnt > 2:
+        #    print(cnt, marginal)
+        num_pos = xp.sum(marginal > 0)
+        num_neg = target_dom_size - num_pos
+        sum_neg = xp.sum(xp.where(marginal < 0, marginal, 0))
+        if sum_neg > -1e-3:
+            #print("##", sum_neg, "marginal-sum_neg=",marginal)
+            marginal = xp.where(marginal < 0, 0, marginal)
+            break
+        marginal = xp.where(marginal <= 0, 0, marginal + sum_neg/num_pos)
+    return marginal
+
+
 def update_factor(clique_factor, mean_prob, target):
     xp = cp if clique_factor.xp == "cp"  else np
+    #xp = np
+    num_record = xp.sum(clique_factor.project(target).values)
     before = clique_factor.project(target).values
     attrs = list(set(clique_factor.domain.attr_list) - set([target]))
     domain_remains = clique_factor.project(attrs).domain
     domain_size = domain_remains.size()
+    target_dom_size = len(before)
     print(f"#DEBUG before clique_factor.project({attrs[0]}).values {clique_factor.project(attrs[0]).values}")
     # index of domain list
     index_list = clique_factor.domain.index_list(attrs)
     target_index = clique_factor.domain.index_list([target])
-    # print(f"size of domain_remains = {domain_size}, remain index_list of {attrs} = {index_list}")
-    # print(f"index_list of {target} = {target_index}")
-    # print("before clique_factor", clique_factor.values)
     print("mean_prob", mean_prob, "before", before, "diff", (mean_prob - before))
-    def func(marginal):
-        marginal = marginal + (mean_prob - before) / domain_size
-        return marginal
-    # clique_factor.values = clique_factor.values + (mean_prob - before) / domain_size
-    clique_factor.values = xp.apply_along_axis(func1d=func, axis=target_index[0],
-                                               arr=clique_factor.values)
-
+    while True:
+        diff = mean_prob - clique_factor.project(target).values
+        subtract = diff / domain_size
+        print("# diff", diff, "xp.sum(xp.abs(diff))", xp.sum(xp.abs(diff)))
+        if xp.sum(xp.abs(diff)) < num_record*0.004:
+            break
+        clique_factor.values = xp.apply_along_axis(func1d=func1d, axis=target_index[0],
+                                                    arr=clique_factor.values, xp=xp, sub=subtract,
+                                                    target_dom_size=target_dom_size)
+        #clique_factor.values = parallel_apply_along_axis(func1d=func1d, axis=target_index[0],
+        #                                            arr=clique_factor.values, diff=subtract)
+    '''
     while xp.sum(clique_factor.values < 0) > 0:
         neg_sum = xp.zeros_like(before)
         num_neighbor = xp.zeros_like(before)
         def sum_neg(marginal,neg_sum,num_neighbor):
             num_neighbor += xp.where(marginal > 0, 1, 0)
-            neg_sum += xp.where(marginal < 1e-5, marginal, 0)
+            neg_sum += xp.where(marginal < 0, marginal, 0)
             return marginal
         xp.apply_along_axis(func1d=sum_neg,
                              axis=target_index[0],
                             arr=clique_factor.values,
                             neg_sum=neg_sum,
                             num_neighbor=num_neighbor)
-        print("neg_sum =", neg_sum)
+        #print("neg_sum =", neg_sum, "num_neighbor =", num_neighbor)
         subtract =  xp.zeros_like(before)
         for domain_idx in range(neg_sum.shape[0]):
             subtract[domain_idx] = neg_sum[domain_idx] / num_neighbor[domain_idx]
-
+        # arg1/arg2=arg3
+        #xp.divide(neg_sum, num_neighbor, subtract)
+        #print("neg_sum/num_neighbor=",subtract)
         def neg(marginal):
             marginal = xp.where(marginal <= 0, 0, marginal + subtract)
             return marginal
         clique_factor.values = xp.apply_along_axis(func1d=neg, axis=target_index[0],
                                                     arr=clique_factor.values)
+    #clique_factor.values = xp.where(clique_factor.values < 0, 0, clique_factor.values)
+    '''
     print(f"#DEBUG after clique_factor.project({attrs[0]}).values {clique_factor.project(attrs[0]).values}")
     print("After num_negative", xp.sum(clique_factor.values < 0))
     return clique_factor
