@@ -8,13 +8,136 @@ from exp.evaluate import k_way_marginal
 from PrivMRF.domain import Domain
 import json
 import itertools
-consistency = False
+import cupy as cp
+import multiprocessing
 
 def mean_noisy_data_num(models):
     mean_noisy_data_num = 0
     for mrf in models:
         mean_noisy_data_num += mrf.noisy_data_num
     return round(mean_noisy_data_num / len(models))
+
+
+def update_factor_by_data_num(clique_factor, mean_num):
+    before  = clique_factor.sum()
+    print("before update_factor_by_data_num", before)
+    clique_factor.values = clique_factor.values + (mean_num - before) * (clique_factor.values / before)
+    print("after update_factor_by_data_num", clique_factor.sum())
+    return clique_factor
+
+
+def parallel_apply_along_axis(func1d, axis, arr, *args, **kwargs):
+    """
+    Like numpy.apply_along_axis(), but takes advantage of multiple
+    cores.
+    """
+    # Effective axis where apply_along_axis() will be applied by each
+    # worker (any non-zero axis number would work, so as to allow the use
+    # of `np.array_split()`, which is only done on axis 0):
+    effective_axis = 1 if axis == 0 else axis
+    if effective_axis != axis:
+        arr = arr.swapaxes(axis, effective_axis)
+
+    # Chunks for the mapping (only a few chunks):
+    chunks = [(func1d, effective_axis, sub_arr, args, kwargs)
+              for sub_arr in np.array_split(arr, multiprocessing.cpu_count())]
+
+    pool = multiprocessing.Pool()
+    individual_results = pool.map(unpacking_apply_along_axis, chunks)
+    # Freeing the workers:
+    pool.close()
+    pool.join()
+
+    return xp.concatenate(individual_results)
+
+
+def unpacking_apply_along_axis(all_args):
+    """
+    Like numpy.apply_along_axis(), but with arguments in a tuple
+    instead.
+
+    This function is useful with multiprocessing.Pool().map(): (1)
+    map() only handles functions that take a single argument, and (2)
+    this function can generally be imported from a module, as required
+    by map().
+    """
+    (func1d, axis, arr, args, kwargs) = all_args
+    return np.apply_along_axis(func1d, axis, arr, *args, **kwargs)
+
+
+def func1d(marginal, xp, sub, target_dom_size):
+    marginal = marginal + sub
+    #cnt = 0
+    while True:
+        #cnt += 1
+        #if cnt > 2:
+        #    print(cnt, marginal)
+        num_pos = xp.sum(marginal > 0)
+        num_neg = target_dom_size - num_pos
+        sum_neg = xp.sum(xp.where(marginal < 0, marginal, 0))
+        if sum_neg > -1e-3:
+            #print("##", sum_neg, "marginal-sum_neg=",marginal)
+            marginal = xp.where(marginal < 0, 0, marginal)
+            break
+        marginal = xp.where(marginal <= 0, 0, marginal + sum_neg/num_pos)
+    return marginal
+
+
+def update_factor(clique_factor, mean_prob, target):
+    xp = cp if clique_factor.xp == "cp"  else np
+    #xp = np
+    num_record = xp.sum(clique_factor.project(target).values)
+    before = clique_factor.project(target).values
+    attrs = list(set(clique_factor.domain.attr_list) - set([target]))
+    domain_remains = clique_factor.project(attrs).domain
+    domain_size = domain_remains.size()
+    target_dom_size = len(before)
+    print(f"#DEBUG before clique_factor.project({attrs[0]}).values {clique_factor.project(attrs[0]).values}")
+    # index of domain list
+    index_list = clique_factor.domain.index_list(attrs)
+    target_index = clique_factor.domain.index_list([target])
+    print("mean_prob", mean_prob, "before", before, "diff", (mean_prob - before))
+    while True:
+        diff = mean_prob - clique_factor.project(target).values
+        subtract = diff / domain_size
+        print("# diff", diff, "xp.sum(xp.abs(diff))", xp.sum(xp.abs(diff)))
+        if xp.sum(xp.abs(diff)) < num_record*0.004:
+            break
+        clique_factor.values = xp.apply_along_axis(func1d=func1d, axis=target_index[0],
+                                                    arr=clique_factor.values, xp=xp, sub=subtract,
+                                                    target_dom_size=target_dom_size)
+        #clique_factor.values = parallel_apply_along_axis(func1d=func1d, axis=target_index[0],
+        #                                            arr=clique_factor.values, diff=subtract)
+    '''
+    while xp.sum(clique_factor.values < 0) > 0:
+        neg_sum = xp.zeros_like(before)
+        num_neighbor = xp.zeros_like(before)
+        def sum_neg(marginal,neg_sum,num_neighbor):
+            num_neighbor += xp.where(marginal > 0, 1, 0)
+            neg_sum += xp.where(marginal < 0, marginal, 0)
+            return marginal
+        xp.apply_along_axis(func1d=sum_neg,
+                             axis=target_index[0],
+                            arr=clique_factor.values,
+                            neg_sum=neg_sum,
+                            num_neighbor=num_neighbor)
+        #print("neg_sum =", neg_sum, "num_neighbor =", num_neighbor)
+        subtract =  xp.zeros_like(before)
+        for domain_idx in range(neg_sum.shape[0]):
+            subtract[domain_idx] = neg_sum[domain_idx] / num_neighbor[domain_idx]
+        # arg1/arg2=arg3
+        #xp.divide(neg_sum, num_neighbor, subtract)
+        #print("neg_sum/num_neighbor=",subtract)
+        def neg(marginal):
+            marginal = xp.where(marginal <= 0, 0, marginal + subtract)
+            return marginal
+        clique_factor.values = xp.apply_along_axis(func1d=neg, axis=target_index[0],
+                                                    arr=clique_factor.values)
+    #clique_factor.values = xp.where(clique_factor.values < 0, 0, clique_factor.values)
+    '''
+    print(f"#DEBUG after clique_factor.project({attrs[0]}).values {clique_factor.project(attrs[0]).values}")
+    print("After num_negative", xp.sum(clique_factor.values < 0))
+    return clique_factor
 
 
 def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, target, all_attr_list):
@@ -24,6 +147,7 @@ def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, ta
         # P[target]
         prob = clique_factor.project(target).values
         df.loc[:, target] = generate_column_data(prob, noisy_data_num)
+        print(f"marginal_value {target}={prob}")
     else:
         # hist[target, cond_attr1, cond_attr2,...]
         marginal_value = clique_factor.project(cond + [target])
@@ -34,7 +158,8 @@ def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, ta
         attr_list.append(target)
 
         marginal_value = marginal_value.moveaxis(attr_list).values
-
+        # if len(cond) <= 2:
+        #     print(f"marginal_value {attr_list}={marginal_value}")
         def foo(group):
             idx = group.name
             vals = generate_column_data(marginal_value[idx], group.shape[0])
@@ -49,16 +174,19 @@ def pandas_generate_cond_column_data(df, noisy_data_num, clique_factor, cond, ta
     return df
 
 
-def synthetic(models):
+def synthetic(models, consistency):
     share_attr = []
     all_attr_list = []
-    for mrf in models:
+    for idx, mrf in enumerate(models):
         attr_party = mrf.domain.attr_list
         print(f"attr = {attr_party}")
-        if len(share_attr) == 0:
+        if idx == 0:
             share_attr = attr_party
+        elif idx == 1:
+            share_attr = list(set(share_attr) & set(attr_party))
         else:
-            share_attr = set(share_attr) & set(attr_party)
+            share_attr += list(set(all_attr_list) & set(attr_party))
+        print("share_attr", share_attr)
         all_attr_list += attr_party
 
     all_attr_list = list(set(all_attr_list))
@@ -74,44 +202,53 @@ def synthetic(models):
     # belief propagation to get clique marginals and
     # generate data conditioned on separators
     clique_marginal_A, partition_func = models[0].belief_propagation(models[0].potential)
-
     prob_for_consistency = dict()
+    cnt_for_consistency = dict()
     for mrf in models:
         clique_marginal, partition_func = mrf.belief_propagation(mrf.potential)
         for clique in clique_marginal:
-            print(clique)
+            print(clique, prob_for_consistency.keys())
             # new_clique = tuple([attr+len(attrA)-1 for attr in clique])
-            # TODO
             clique_marginal_A[clique] = clique_marginal[clique]
             if consistency:
+                clique_marginal_A[clique] = update_factor_by_data_num(clique_marginal_A[clique], noisy_data_num)
                 targets = set(share_attr) & set(clique)
                 if len(targets) > 0:
                     print(targets, share_attr, clique)
                     for target in targets:
                         if target in prob_for_consistency:
+                            cnt_for_consistency[target] += 1
                             prob_for_consistency[target] += clique_marginal[clique].project(target).values
                         else:
+                            cnt_for_consistency[target] = 1
                             prob_for_consistency[target] = clique_marginal[clique].project(target).values
+                        print("target, cnt", prob_for_consistency[target], cnt_for_consistency[target])
         # clique_marginal_B[new_clique] = tmp_clique_marginal_B[clique]
         # clique_marginal_B.pop(clique)
+    clique_marginal_list = list(clique_marginal_A.keys())
     for target in prob_for_consistency:
         # Mean of shared attr
-        prob = prob_for_consistency[target] / len(models)
-        df.loc[:, target] = generate_column_data(prob, noisy_data_num)
-        print(f"# DEBUG Sum of 0 in {target} = {(df[target] == 0).sum()}")
-    clique_marginal_list = list(clique_marginal_A.keys())
-
+        mean_prob = prob_for_consistency[target] / cnt_for_consistency[target]
+        #mean_prob = mean_prob + (noisy_data_num - mean_prob.sum()) * (mean_prob / mean_prob.sum())
+        #df.loc[:, target] = generate_column_data(mean_prob, noisy_data_num)
+        #print(f"# DEBUG Sum of 0 in {target} = {(df[target] == 0).sum()}")
+        for clique in clique_marginal_list:
+            if target in clique:
+                print("if target in clique:", clique)
+                #clique_marginal_A[clique] = update_factor_by_data_num(clique_marginal_A[clique], noisy_data_num)
+                clique_marginal_A[clique] = update_factor(clique_marginal_A[clique], mean_prob, target)
+                print("#DEBUG  clique_marginal_A[clique].project(target).values",  clique_marginal_A[clique].project(target).values)
     finished_attr = set()
     separator = set()
     for idx, start in enumerate(clique_marginal_list):
         clique = clique_marginal_list[idx+1]
         print(f"start = {start}, clique = {clique}")
         if len(finished_attr) == 0:
-            cond_attr =  list(share_attr) if consistency else []
+            cond_attr =  []
             for attr in start:
-                if attr in prob_for_consistency:
-                    finished_attr.add(attr)
-                    continue
+                # if attr in prob_for_consistency:
+                #     finished_attr.add(attr)
+                #     continue
                 print('  cond_attr: {}, attr: {}'.format(cond_attr, attr))
                 df = pandas_generate_cond_column_data(df, noisy_data_num,
                     clique_marginal_A[start], cond_attr, attr, all_attr_list)
@@ -139,38 +276,8 @@ def synthetic(models):
     # tools.write_csv(data_list, all_attr_list), path)
     return data_list
 
-def synthetic_party(df, model, clique_marginal, all_attr_list, common_attr=[]):
-    clique_marginal_list = list(clique_marginal.keys())
-    finished_attr = set()
-    separator = set()
-    for idx, start in enumerate(clique_marginal_list):
-        clique = clique_marginal_list[idx+1]
-        # print(f"start = {start}, clique = {clique}")
-        if len(finished_attr) == 0:
-            cond_attr = common_attr
-            for attr in start:
-                print('  cond_attr: {}, attr: {}'.format(cond_attr, attr))
-                df = pandas_generate_cond_column_data(df, model,
-                    clique_marginal[start], cond_attr, attr, all_attr_list)
-                finished_attr.add(attr)
-                cond_attr.append(attr)
 
-        separator = set(start) & set(clique)
-        print('start: {}, clique: {}, sep: {}'.format(start, clique, separator))
-        cond_attr = list(separator)
-        for attr in clique:
-            if attr not in finished_attr:
-                print('  cond_attr: {}, attr: {} {}/{}'.format(cond_attr, attr, len(finished_attr), len(all_attr_list)))
-                df = pandas_generate_cond_column_data(df, model,
-                    clique_marginal[clique], cond_attr,
-                    attr, all_attr_list)
-                finished_attr.add(attr)
-                cond_attr.append(attr)
-        if idx == len(clique_marginal_list) - 2:
-            break
-    return df
-
-def concat(num_party=2, data_name="acs", exp_name="test", epsilon=0.4):
+def concat(num_party=2, data_name="acs", exp_name="test", epsilon=0.4, consistency=False):
     _, all_attr_list = read_csv('./data/' + data_name + '.csv')
 
     # model = MarkovRandomField.load_model('./temp/party_' + data_name + '_model.mrf')
@@ -185,7 +292,7 @@ def concat(num_party=2, data_name="acs", exp_name="test", epsilon=0.4):
         print(path)
         models.append(MarkovRandomField.load_model(path))
 
-    data_list = synthetic(models)
+    data_list = synthetic(models, consistency)
     write_csv(data_list, all_attr_list, './out/PrivMRF'+'_'+data_name+'_'+exp_name+'.csv')
     return data_list
 
@@ -236,7 +343,9 @@ def eval_diff_MI(data_name, syn):
         diff += abs(raw_MI - syn_MI)
         num_pairs += 1
         print(f"Mutual information of {attr_A} and {attr_B} -> raw: {raw_MI}, syn: {syn_MI}")
-    print("Evaluation of mutual information =", diff/num_pairs)
+    mid = diff/num_pairs
+    print("Evaluation of mutual information =", mid)
+    return mid
 
 if __name__ == '__main__':
     data_name = "dummy_12_8_100000"
