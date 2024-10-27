@@ -37,11 +37,6 @@ def k_way_marginal(data_name, dp_data_list, k, marginal_num):
     # data, headings = utils.tools.read_csv('./exp_data/' + data_name + '_train.csv')
     data, headings = utils.tools.read_csv('./preprocess/' + data_name + '.csv', print_info=False)
     data = np.array(data, dtype=int)
-    print("hist 0", pd.Series(data[:,0]).value_counts())
-    print("hist 7", pd.Series(data[:,7]).value_counts())
-    dp_data = np.array(dp_data_list[0], dtype=int)
-    print("dp hist 0", pd.Series(dp_data[:,0]).value_counts())
-    print("dp hist 7", pd.Series(dp_data[:,7]).value_counts())
 
     attr_num = data.shape[1]
     data_num = data.shape[0]

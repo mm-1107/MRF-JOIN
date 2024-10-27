@@ -57,7 +57,7 @@ if __name__ == '__main__':
     exp_name = 'test'
 
     # number of experiments
-    repeat = 5
+    repeat = 1
 
     num_party = args.party
 
@@ -91,8 +91,7 @@ if __name__ == '__main__':
             16: {2: [6,7]},
         }
     }
-    chain_bool = "chain" if args.chain else ""
-    path = f'./result/{data_name}_{num_party}party_{chain_bool}_{args.task}.json'
+    path = f'./result/{data_name}_{num_party}party_{args.task}.json'
     if os.path.exists(path):
         with open(path, 'r') as in_file:
             result = json.load(in_file)
@@ -100,18 +99,11 @@ if __name__ == '__main__':
         result = {}
     if str(args.epsilon) not in result:
         result[str(args.epsilon)] = {}
-    if "w/o co" not in result[str(args.epsilon)]:
-        result[str(args.epsilon)]["w/o co"] = {}
-    if "w/ co" not in result[str(args.epsilon)]:
-        result[str(args.epsilon)]["w/ co"] = {}
-    result[str(args.epsilon)]["w/o co"]["3"] = 0
-    result[str(args.epsilon)]["w/o co"]["4"] = 0
-    result[str(args.epsilon)]["w/o co"]["5"] = 0
-    result[str(args.epsilon)]["w/o co"]["mid"] = 0
-    result[str(args.epsilon)]["w/ co"]["3"] = 0
-    result[str(args.epsilon)]["w/ co"]["4"] = 0
-    result[str(args.epsilon)]["w/ co"]["5"] = 0
-    result[str(args.epsilon)]["w/ co"]["mid"] = 0
+    if data_name not in result[str(args.epsilon)]:
+        result[str(args.epsilon)][data_name] = {}
+    result[str(args.epsilon)][data_name]["3"] = 0
+    result[str(args.epsilon)][data_name]["4"] = 0
+    result[str(args.epsilon)][data_name]["5"] = 0
     for i in range(repeat):
         exhead = []
         for idx, party in enumerate(parties):
@@ -121,9 +113,9 @@ if __name__ == '__main__':
                                               attr_dist[len(share_attr)][attr_num][num_party][idx],
                                               share_attr, [], exhead)
                 exhead += exhead_
-                exhead = list(set(exhead))
+                print(exhead)
                 if args.chain:
-                    share_attr = [exhead_[-1]] if exhead_[-1] != share_attr[0] else [exhead_[-2]]
+                    share_attr = [exhead_[-1]]
             else:
                 preprocess(data_name)
             if args.task == 'TVD':
@@ -142,41 +134,18 @@ if __name__ == '__main__':
 
         if args.task == 'TVD':
             server_start = time()
-            concat_data = concat.concat(num_party=num_party,
-                                        data_name=data_name,
-                                        epsilon=epsilon,
-                                        consistency=False)
+            concat_data = concat.concat(num_party=num_party, data_name=data_name, epsilon=epsilon)
             server_end = time()
-            print(f'\n\n w/o CO Server duration = {server_end-server_start}')
             tmp_dict = concat.marginal_exp([concat_data], data_name)
-            mid = concat.eval_diff_MI(data_name=data_name, syn=concat_data)
-
+            concat.eval_diff_MI(data_name=data_name, syn=concat_data)
             # print(tmp_dict)
-            result[str(args.epsilon)]["w/o co"]["3"] += tmp_dict["3"][0]
-            result[str(args.epsilon)]["w/o co"]["4"] += tmp_dict["4"][0]
-            result[str(args.epsilon)]["w/o co"]["5"] += tmp_dict["5"][0]
-            result[str(args.epsilon)]["w/o co"]["mid"] += mid
-
-            server_start = time()
-            concat_data = concat.concat(num_party=num_party,
-                                        data_name=data_name,
-                                        epsilon=epsilon,
-                                        consistency=True)
-            server_end = time()
-            tmp_dict = concat.marginal_exp([concat_data], data_name)
-            mid = concat.eval_diff_MI(data_name=data_name, syn=concat_data)
-
-            result[str(args.epsilon)]["w/ co"]["3"] += tmp_dict["3"][0]
-            result[str(args.epsilon)]["w/ co"]["4"] += tmp_dict["4"][0]
-            result[str(args.epsilon)]["w/ co"]["5"] += tmp_dict["5"][0]
-            result[str(args.epsilon)]["w/ co"]["mid"] += mid
-
+            result[str(args.epsilon)][data_name]["3"] += tmp_dict["3"][0]
+            result[str(args.epsilon)][data_name]["4"] += tmp_dict["4"][0]
+            result[str(args.epsilon)][data_name]["5"] += tmp_dict["5"][0]
         else:
             for k in range(5):
                 exp_name_ = exp_name+str(epsilon)+'_'+str(k)
-                concat.concat(num_party=num_party, data_name=data_name,
-                              exp_name=exp_name_,epsilon=epsilon,
-                              consistency=False)
+                concat.concat(num_party=num_party, data_name=data_name, exp_name=exp_name_,epsilon=epsilon)
             # exp_name = exp_name+str(epsilon_list[0])+'_'+str(k)
             run_experiment([data_name], method_list, exp_name+str(epsilon), task='SVM',
                 epsilon_list=[epsilon], repeat=1,
@@ -184,12 +153,10 @@ if __name__ == '__main__':
 
     if args.task == 'TVD':
         with open(path, 'w') as out_file:
-            for way in result[str(args.epsilon)]["w/ co"]:
-                result[str(args.epsilon)]["w/ co"][way] = result[str(args.epsilon)]["w/ co"][way] / repeat
-            for way in result[str(args.epsilon)]["w/o co"]:
-                result[str(args.epsilon)]["w/o co"][way] = result[str(args.epsilon)]["w/o co"][way] / repeat
-
-            print(result[str(args.epsilon)])
-            print(f"Result is saved in {path}")
+            result[str(args.epsilon)][data_name]["3"] = result[str(args.epsilon)][data_name]["3"] / repeat
+            result[str(args.epsilon)][data_name]["4"] = result[str(args.epsilon)][data_name]["4"] / repeat
+            result[str(args.epsilon)][data_name]["5"] = result[str(args.epsilon)][data_name]["5"] / repeat
+            print(result[str(args.epsilon)][data_name])
             json.dump(result, out_file)
-        print(f'\n\nOne client duration = {client_end-client_start}, w/ CO Server duration = {server_end-server_start}')
+        print(share_attr)
+        print(f'\n\nOne client duration = {client_end-client_start}, Server duration = {server_end-server_start}')
