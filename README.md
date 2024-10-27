@@ -24,7 +24,7 @@ To reproduce the experimental results from the paper:
 python3 script.py --dataset=[nltcs/acs/br2000/adult] --epsilon=[0.4/0.8/1.6/3.2] --task=[TVD/SVM]
 ```
 
-## 2.2. Multiple parties
+### 2.2. Multiple parties
 For multi-party data synthesis, the model can be run as Star Model or Chain Model as shown below:
 
 ```
